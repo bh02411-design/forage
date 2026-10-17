@@ -41,12 +41,16 @@ function render(){
   $('#collection-count').textContent=state.collection.reduce((n,c)=>n+c.qty,0).toLocaleString();$('#memory-count').textContent=state.memories.length;
 }
 function renderDeck(){
- const filter=$('#deck-search').value.toLowerCase(),cards=deck().cards.filter(c=>(zone==='main'?['main','commander'].includes(c.zone):c.zone==='maybe')&&(`${c.name} ${(c.roles||[]).join(' ')} ${c.type_line||''} ${c.oracle_text||''}`.toLowerCase().includes(filter)));
+ const filter=$('#deck-search').value.toLowerCase(),cards=deck().cards.filter(c=>(zone==='main'?['main','commander'].includes(c.zone):c.zone==='maybe')&&(c.zone==='commander'||`${c.name} ${(c.roles||[]).join(' ')} ${c.type_line||''} ${c.oracle_text||''}`.toLowerCase().includes(filter)));
  $('#card-count').textContent=cards.reduce((a,c)=>a+c.qty,0)+' cards';
  const entries=ForageCards.groups(cards,groupBy,sortBy);
  if(groupBy==='category'&&zone==='main'&&!filter){for(const name of deck().categories||[])if(!entries.some(([g])=>g===name))entries.push([name,[]]);}
  $('#deck-list').className='deck-list card-board mode-'+cardMode;
- $('#deck-list').innerHTML=entries.map(([g,list])=>`<section class="visual-group" data-drop-group="${esc(g)}"><div class="group-label">${groupBy==='category'?`<button class="category-heading" data-edit-category="${esc(g)}" title="Edit category">${esc(g)} <span class="edit-pencil">✎</span></button>`:esc(g)}<span>${list.reduce((n,c)=>n+c.qty,0)}</span></div><div class="group-cards">`+list.map(c=>cardMode==='list'?`<button class="card-row" draggable="true" data-visual-card="${esc(c.id)}" data-card-source="deck"><span class="qty">${c.qty}</span><span class="card-name">${esc(c.name)}</span>${c.protected?'<span class="lock" title="Protected card">◆</span>':''}<span class="card-mv">${c.land?'◇':c.mv??'?'}</span></button>`:ForageCards.tile(c,state.collection)).join('')+'</div></section>').join('')||'<div class="empty">Nothing here yet.<br>Import a list or drop a card.</div>';
+ $('#deck-list').innerHTML=entries.map(([g,list])=>{
+  const pinned=list.length>0&&list.every(c=>c.zone==='commander');
+  const heading=pinned?'<span title="Commander position is fixed first">Commander · pinned</span>':groupBy==='category'?`<button class="category-heading" data-edit-category="${esc(g)}" title="Edit category">${esc(g)} <span class="edit-pencil">✎</span></button>`:esc(g);
+  return `<section class="visual-group${pinned?' commander-group':''}" ${pinned?'data-pinned-commander="true"':`data-drop-group="${esc(g)}"`}><div class="group-label">${heading}<span>${list.reduce((n,c)=>n+c.qty,0)}</span></div><div class="group-cards">`+list.map(c=>cardMode==='list'?`<button class="card-row" draggable="true" data-visual-card="${esc(c.id)}" data-card-source="deck"><span class="qty">${c.qty}</span><span class="card-name">${esc(c.name)}</span>${c.protected?'<span class="lock" title="Protected card">◆</span>':''}<span class="card-mv">${c.land?'◇':c.mv??'?'}</span></button>`:ForageCards.tile(c,state.collection)).join('')+'</div></section>';
+ }).join('')||'<div class="empty">Nothing here yet.<br>Import a list or drop a card.</div>';
  $$('[data-card-mode]').forEach(b=>{b.classList.toggle('selected',b.dataset.cardMode===cardMode);b.setAttribute('aria-pressed',String(b.dataset.cardMode===cardMode))});
  $('#group-cards').value=groupBy;$('#sort-cards').value=sortBy;
  if(cardMode==='stacks')$('#deck-list').innerHTML='<div class="stack-columns">'+$('#deck-list').innerHTML+'</div>';

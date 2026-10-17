@@ -85,3 +85,7 @@
 .visual-group:has(.group-cards:empty) .group-cards:after{content:'Drag cards here';display:block;padding:20px 0;color:var(--muted);font-size:11px;text-align:center}
 
 .message-heading{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:9px}.message-heading .message-label{margin:0}.context-inspect{border:0;background:transparent;color:#91a78b;font-size:9px;padding:2px;text-decoration:underline;text-underline-offset:3px}.context-inspect:hover{color:var(--green)}.context-excerpt{padding:13px;margin:10px 0;border:1px solid #34472d;border-radius:6px;font-size:12px;line-height:1.8;overflow-wrap:anywhere}.context-excerpt p{margin:8px 0}.context-excerpt .eyebrow{font-size:9px}
+
+/* Commander groups lead the normal flow in every mode, with partners fully visible. */
+.mode-stacks .commander-group .card-visual{height:auto;border:1px solid #35422f;border-radius:8px;margin-bottom:8px}
+.mode-stacks .commander-group .card-visual:last-child{margin-bottom:0}

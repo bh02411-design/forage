@@ -6,15 +6,17 @@ const norm=s=>String(s).toLowerCase().split(' // ')[0].replace(/[^a-z0-9]/g,'');
 const imageUrl=s=>{try{const u=new URL(s);return u.protocol==='https:'&&u.hostname==='cards.scryfall.io'?u.href:''}catch{return ''}};
 function art(card,collection=[]){if(imageUrl(card.image))return imageUrl(card.image);const found=collection.find(c=>norm(c.name)===norm(card.name)&&imageUrl(c.image));return found?imageUrl(found.image):''}
 function groupName(card,by){
- if(card.zone==='commander')return by==='category'?(card.group||'Commander'):'Commander';
+ if(card.zone==='commander')return 'Commander';
  if(by==='mana')return card.land?'Lands':card.mv==null?'Unknown mana value':'MV '+(Number(card.mv)>=7?'7+':card.mv);
  if(by==='type'){if(card.land)return 'Land';const type=String(card.type_line||'').split('—')[0];return ['Creature','Planeswalker','Instant','Sorcery','Enchantment','Artifact','Battle'].find(t=>type.includes(t))||'Unresolved type'}
  if(by==='color'){if(card.color_identity==null)return 'Unresolved color';const colors=[...card.color_identity].sort();return colors.length?colors.join(' / '):'Colorless'}
  return card.group||'Uncategorized';
 }
 function groups(cards,by='category',sort='name'){
- const map=new Map();for(const c of cards){const g=groupName(c,by);if(!map.has(g))map.set(g,[]);map.get(g).push(c)}
- const entries=[...map.entries()].sort(([a],[b])=>a===b?0:a==='Commander'?-1:b==='Commander'?1:(a==='Land'||a==='Lands')?1:(b==='Land'||b==='Lands')?-1:a.localeCompare(b,undefined,{numeric:true}));
+ const commanders=cards.filter(c=>c.zone==='commander'),map=new Map();
+ for(const c of cards){if(c.zone==='commander')continue;const g=groupName(c,by);if(!map.has(g))map.set(g,[]);map.get(g).push(c)}
+ const entries=[...map.entries()].sort(([a],[b])=>a===b?0:(a==='Land'||a==='Lands')?1:(b==='Land'||b==='Lands')?-1:a.localeCompare(b,undefined,{numeric:true}));
+ if(commanders.length)entries.unshift(['Commander',commanders]);
  for(const [,list] of entries)list.sort((a,b)=>sort==='mana'?((a.mv??1000)-(b.mv??1000)||a.name.localeCompare(b.name)):a.name.localeCompare(b.name));return entries;
 }
 function tile(card,collection=[],source='deck',availability=null){
