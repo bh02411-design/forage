@@ -5,6 +5,39 @@ from core import key, availability
 FACT_FIELDS = ['mv','mana_cost','power','toughness','oracle_text','type_line','color_identity','legalities','scryfall_uri','scryfall_id','meta_source']
 ABILITIES = {'draw':r'\bdraw(?:s|ing)?\b','discard':r'\bdiscard(?:s|ing)?\b','mill':r'\bmill(?:s|ing)?\b','sacrifice':r'\bsacrific(?:e|es|ing)\b','flashback':r'\bflashback\b','food':r'\bfood\b','mana':r'\bmana\b|\badd\b.*\{[WUBRG0-9C]'}
 
+def card_facts(card,with_source=False):
+    """Only Commander-relevant facts belong in model context, not the full API row."""
+    fields=['mv','mana_cost','power','toughness','oracle_text','type_line','color_identity']
+    if with_source:fields+=['scryfall_uri','meta_source']
+    result={f:card[f] for f in fields if card.get(f) is not None}
+    legality=card.get('legalities') or {}
+    if legality.get('commander') is not None:result['legalities']={'commander':legality['commander']}
+    return result
+
+def mana_value_filter(query):
+    """Recognize explicit ranges such as 2-3 CMC or mana value 2 to 3."""
+    unit=r'(?:cmc|mv|mana(?:\s+value)?)'
+    bounds=r'(\d{1,2})\s*(?:[-–—]|to)\s*(\d{1,2})'
+    patterns=[bounds+r'\s*'+unit+r'\b',r'\b'+unit+r'\s*(?:between\s+)?'+bounds]
+    for pattern in patterns:
+        found=re.search(pattern,query,re.I)
+        if found:
+            low,high=map(int,found.groups())
+            if low<=high:return {'min':low,'max':high}
+    return None
+
+def search_prompt(result,limit=10):
+    """Keep enough evidence to compare candidates without repeated database metadata."""
+    data={k:v for k,v in result.items() if k!='cards'}
+    data['cards']=[]
+    for c in result.get('cards',[])[:limit]:
+        row={k:c[k] for k in ['name','already_in_deck','owned','assigned_elsewhere','available','color_check','roles'] if k in c}
+        row.update(card_facts(c,with_source=True))
+        data['cards'].append(row)
+    data['returned']=len(data['cards'])
+    data['note']='Oracle ability matches, not a strategic ranking. Unknown metadata may hide matches. Compare supplied costs, setup, available copies and current deck membership.'
+    return data
+
 def intents(query):
     q=query.lower()
     return [k for k,p in ABILITIES.items() if re.search(p,q,re.I)]
@@ -41,7 +74,7 @@ def draw_profile(card):
 
 def evidence(card,state,deck):
     ci=card.get('color_identity');colors=commander_colors(deck)
-    return {'name':card['name'],**{f:card.get(f) for f in FACT_FIELDS},**availability(state,card['name'],deck['id']),
+    return {'name':card['name'],**card_facts(card,with_source=True),**availability(state,card['name'],deck['id']),
             'color_check':'unknown' if ci is None or colors is None else 'legal' if set(ci)<=colors else 'outside identity',
             'draw_review':draw_profile(card)}
 

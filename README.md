@@ -12,7 +12,7 @@ Import a deck and collection separately. Use **Resolve card data** to retrieve O
 
 Load a chat model in LM Studio and start its local server. Open **Local AI & settings**, use `http://127.0.0.1:1234/v1`, list the models, choose one and save. Only loopback HTTP AI endpoints are accepted. The application does not connect to paid cloud inference.
 
-Requests include the active deck, saved preferences, recent conversation, relevant earlier excerpts and collection search results. Automatic prompt compaction reduces reference data before conversation history and adapts to context-overflow errors. Model reasoning quality still varies. See **LOCAL-MODEL-CHECK.md** for live tests.
+Requests include the active deck, saved preferences, recent conversation, relevant earlier excerpts and collection search results. Only Commander legality is included in model context. Explicit ranges such as 2–3 CMC filter collection candidates before retrieval. Automatic prompt compaction trims irrelevant per-card metadata and repeated evidence before conversation history, preserves the full roster and saved preferences, and adapts to context-overflow errors. Model reasoning quality still varies. See **LOCAL-MODEL-CHECK.md** for live tests.
 
 Ability searches match Oracle words rather than card-name fragments or editable role tags. Existing mainboard/commander cards are excluded from addition searches except explicit ownership lookups. Known off-color and banned cards are filtered. Unknown metadata and unavailable copies are flagged. Search ordering is a retrieval hint, not a strategic rating.
 
