@@ -6,6 +6,7 @@ from pathlib import Path
 from core import auto_categorize_card, uid, key, parse_import, make_entry, analysis, availability, mana_sample, apply_swap, category_names, normalize_category_changes, apply_category_changes, normalize_workspace_changes, apply_workspace_plan
 from seed import initial_state
 import updater
+import launcher
 from advisor import FACT_FIELDS, ABILITIES, intents, catalog, commander_colors, evidence, GUIDANCE, check_recommendations, wants_draw_advice, preference_suggestion, card_facts, mana_value_filter, search_prompt
 ROOT=Path(__file__).resolve().parent
 DATA=Path(os.environ.get('FORAGE_DATA_DIR',str(ROOT/'data')))
@@ -480,6 +481,9 @@ class Handler(BaseHTTPRequestHandler):
         if not self.valid_host(): return self.send_json({'error':'Loopback Host required.'},403)
         path=urllib.parse.urlsplit(self.path).path
         if path=='/api/health':return self.send_json({'version':updater.current_version(ROOT),'instance':INSTANCE_ID})
+        if path=='/api/desktop/status':
+            try:return self.send_json(launcher.desktop_status(ROOT,DATA,self.server.server_address[1]))
+            except Exception as exc:return self.send_json({'error':str(exc)},400)
         if path=='/api/updates/status':
             result=updater.status(ROOT,DATA);result['supervised']=os.environ.get('FORAGE_LAUNCHER')=='1';result['instance']=INSTANCE_ID;result['version_switch_supported']=os.environ.get('FORAGE_VERSION_SWITCH')=='1';return self.send_json(result)
         if path=='/api/updates/history':
@@ -525,6 +529,22 @@ class Handler(BaseHTTPRequestHandler):
             payload=json.loads(self.rfile.read(length))
             if not isinstance(payload,dict): raise ValueError('Invalid request.')
             path=urllib.parse.urlsplit(self.path).path
+            if path=='/api/desktop':
+                action=payload.get('action')
+                if action=='quit':
+                    if os.environ.get('FORAGE_TRAY')!='1':raise ValueError('Quit from the launcher that owns this server.')
+                elif action=='configure':
+                    if os.name!='nt':raise ValueError('Tray integration is available on Windows.')
+                else:raise ValueError('Unknown desktop action.')
+                with REQUEST_LOCK:
+                    if ACTIVE_WRITES!=1:raise ValueError('Another request is active. Wait for it to finish, then retry.')
+                    if action=='configure':
+                        result=launcher.configure_desktop(ROOT,DATA,self.server.server_address[1],payload.get('startup',True))
+                        if result['tray_running']:return self.send_json({'ok':True,**result})
+                        launcher.launch_background(ROOT,DATA,self.server.server_address[1],False,True)
+                    UPDATE_EXIT=77
+                self.send_json({'ok':True,'status':'tray_starting' if action=='configure' else 'quitting'})
+                threading.Thread(target=self.server.shutdown,daemon=True).start();return
             if path=='/api/updates':
                 action=payload.get('action')
                 if action=='configure':

@@ -94,3 +94,12 @@ console.log('8 pending-decision header/layout checks passed.');
  context.zone='maybe';await button.onclick();assert.equal(calls[2][1].zone,'maybe');
  console.log('3 board auto-categorization control checks passed.');
 })().catch(error=>{console.error(error);process.exitCode=1});
+
+(async()=>{
+ const button={},message={},checkbox={checked:true},calls=[],modals=[];
+ const ctx={api:async(path,payload)=>{calls.push([path,payload]);return path==='desktop/status'?{supported:true,tray_running:true,startup_enabled:false}:{ok:true,tray_running:true}},modal:(title,html)=>modals.push(html),$:s=>s==='#desktop-save'?button:s==='#desktop-message'?message:checkbox};
+ vm.createContext(ctx);vm.runInContext(app.slice(app.indexOf('async function desktopDialog(')),ctx);
+ await ctx.desktopDialog();assert.match(modals.at(-1),/Start Forage quietly/);await button.onclick();assert.equal(calls.at(-1)[1].startup,true);assert.equal(calls.at(-1)[0],'desktop');
+ ctx.api=async()=>({supported:false});await ctx.desktopDialog();assert.match(modals.at(-1),/currently supports Windows/);
+ console.log('4 desktop setup interface checks passed.');
+})().catch(error=>{console.error(error);process.exitCode=1});

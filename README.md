@@ -74,6 +74,11 @@ History uses published releases from your configured GitHub repository. Cached h
 
 ### Changelog
 
+**0.2.12**
+
+- Add Windows tray mode and optional startup at sign-in.
+- Add in-app setup, a Start-menu shortcut and background logging.
+
 **0.2.11**
 
 - Automatically categorize unassigned cards entering Mainboard or Considering.
@@ -130,3 +135,11 @@ History uses published releases from your configured GitHub repository. Cached h
 
 
 Mainboard and Considering use existing categories where possible, based on saved roles, then card text, then card type. These defaults are editable presentation heuristics. Unresolved cards stay Uncategorized until metadata is available. Adding, moving, importing and resolving cards all use this behavior. Each board’s Auto-categorize button organizes existing unassigned cards on that board without changing custom categories; Undo restores the prior board. No AI request is needed.
+
+### Windows tray and startup
+
+After updating, open **Local AI & settings → Windows tray & startup**, choose whether to start at Windows sign-in, and click **Save & run in tray**. The existing server hands off to a background launcher using the same data folder. Close the old console if it remains open. Future launches through **Start-Forage.bat** also start the tray service and return immediately. A **Forage** shortcut is created in your Start menu.
+
+Double-click the tray icon to open the browser. Right-click it for **Open Forage**, **Start with Windows**, or **Quit Forage**. Closing the browser leaves the server running. Sign-in starts the service quietly without opening the browser. Startup uses the current user’s registry Run entry `ForageLocalDeckBuilder`; disabling it from the tray or setup removes only that entry. No administrator privileges or pip packages are required. Windows PowerShell, .NET Windows Forms and Python’s `pythonw.exe` supply the native tray UI.
+
+Logs are written to `data/forage.log` (or your configured data directory); the previous log is retained as `forage.previous.log` when it exceeds 2 MB on launch. Only one tray launcher owns a data directory and port. A small launcher bootstrap and fallback are retained under `data/desktop/` so tray startup remains available when switching to an earlier application version. Update supervision continues in tray mode. Quit waits for active requests before stopping the server; older app releases without the shutdown endpoint are terminated when quitting their tray launcher. Windows tray appearance, startup registration and shortcuts need verification on Windows; automated CI runs on Linux.
