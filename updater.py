@@ -11,6 +11,7 @@ MAX_PACKAGE=20*1024*1024
 
 # Release notes stay in an existing updater file so older installers accept the package.
 CHANGELOG={
+ '0.2.13':['Replace the generic Windows tray icon with Forage’s green eight-spoke mark on a dark background.'],
  '0.2.12':['Add Windows system tray mode with Open Forage, Start with Windows and Quit controls.','Add in-app setup and a Start-menu shortcut; run quietly without a persistent console window.'],
  '0.2.11':['Auto-categorize unassigned cards entering Mainboard or Considering using saved roles and card text.','Add an undoable Auto-categorize button on each board; preserve custom categories.'],
  '0.2.10':['Render prose-prefixed, fenced and nested AI JSON as readable chat.','Preserve embedded swap proposals for validation and graphical decisions instead of displaying internal fields.'],

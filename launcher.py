@@ -91,7 +91,30 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 $ctx=New-Object System.Windows.Forms.ApplicationContext
 $icon=New-Object System.Windows.Forms.NotifyIcon
-$icon.Icon=[System.Drawing.SystemIcons]::Application
+# Draw the Forage mark at high resolution, then let Windows choose the tray size.
+Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class ForageIconNative { [DllImport("user32.dll")] public static extern bool DestroyIcon(IntPtr icon); }'
+$bitmap=[System.Drawing.Bitmap]::new(64,64)
+$graphics=[System.Drawing.Graphics]::FromImage($bitmap)
+$graphics.SmoothingMode=[System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+$graphics.Clear([System.Drawing.Color]::Transparent)
+$background=[System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(12,20,15))
+$outline=[System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(70,95,58),2)
+$mark=[System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(197,232,165),5)
+$mark.StartCap=[System.Drawing.Drawing2D.LineCap]::Round
+$mark.EndCap=[System.Drawing.Drawing2D.LineCap]::Round
+$graphics.FillEllipse($background,2,2,60,60)
+$graphics.DrawEllipse($outline,2,2,60,60)
+$graphics.DrawLine($mark,32,12,32,52)
+$graphics.DrawLine($mark,12,32,52,32)
+$graphics.DrawLine($mark,18,18,46,46)
+$graphics.DrawLine($mark,18,46,46,18)
+$handle=$bitmap.GetHicon()
+$sourceIcon=[System.Drawing.Icon]::FromHandle($handle)
+$brandIcon=$sourceIcon.Clone()
+$sourceIcon.Dispose()
+[ForageIconNative]::DestroyIcon($handle) | Out-Null
+$mark.Dispose(); $outline.Dispose(); $background.Dispose(); $graphics.Dispose(); $bitmap.Dispose()
+$icon.Icon=$brandIcon
 $icon.Text='Forage - local deck builder'
 $menu=New-Object System.Windows.Forms.ContextMenuStrip
 $open=$menu.Items.Add('Open Forage')
@@ -119,7 +142,7 @@ $icon.ContextMenuStrip=$menu
 $icon.add_DoubleClick({Start-Process $c.url})
 $icon.Visible=$true
 try { [System.Windows.Forms.Application]::Run($ctx) }
-finally { $icon.Visible=$false; $icon.Dispose(); $menu.Dispose(); $ctx.Dispose() }
+finally { $icon.Visible=$false; $icon.Dispose(); $menu.Dispose(); $ctx.Dispose(); $brandIcon.Dispose() }
 '''
 
 def start_tray(root,data,port,log):

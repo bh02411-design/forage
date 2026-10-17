@@ -74,6 +74,10 @@ History uses published releases from your configured GitHub repository. Cached h
 
 ### Changelog
 
+**0.2.13**
+
+- Add the branded green Forage tray icon. Quit and reopen Forage once after updating to load the new icon.
+
 **0.2.12**
 
 - Add Windows tray mode and optional startup at sign-in.
