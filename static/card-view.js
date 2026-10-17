@@ -32,5 +32,13 @@ function recommendation(rec,collection=[],cards=[],proposals=[]){
  const picture=(card,label)=>{const url=art(card,collection);return `<button class="recommendation-art" data-rec-action="inspect" data-rec-side="${label}" aria-label="Inspect ${escape(card.name)}"><span class="art-frame">${url?`<img src="${escape(url)}" alt="${escape(card.name)}" loading="lazy" decoding="async">`:`<span class="art-placeholder"><strong>${escape(card.name)}</strong><small>Artwork not resolved · click to inspect</small></span>`}</span><strong>${escape(card.name)}</strong><small>${escape(card.mana_cost||'')} · MV ${escape(card.mv??'?')}</small></button>`};
  return `<article class="recommendation-card" data-rec-id="${escape(rec.id)}"><div class="recommendation-pair"><div><span class="eyebrow green">${rec.kind==='match'?'COLLECTION MATCH':'ADD'}</span>${picture(c,'add')}</div>${cut?`<div><span class="eyebrow">CUT</span>${picture(cut,'cut')}</div>`:''}</div><p>${escape(p?.reason||rec.reason||'Review this card for your deck.')}</p><div class="recommendation-actions">${disabled?`<span class="muted small">${passed?'Passed': 'In mainboard'}</span>`:`<button class="button primary" data-rec-action="${p?'accept':'find'}">${p?'Accept swap':'Find a swap'}</button><button class="button secondary" data-rec-action="${p?'different':'main'}">${p?'Different cut':'Add to Mainboard'}</button><button class="button secondary" data-rec-action="maybe" ${maybe?'disabled':''}>${maybe?'In Considering':'Considering'}</button><button class="quiet" data-rec-action="pass">Pass</button>`}</div></article>`;
 }
-const api={groups,art,tile,groupName,recommendation};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.ForageCards=api;
+function pendingDecisions(deck){
+ const proposals=(deck.proposals||[]).filter(p=>p.status==='pending');
+ const latest=new Map();
+ for(const message of deck.chat||[])for(const rec of message.recommendations||[])latest.set(norm(rec.card.name),{message:message.id,rec});
+ const recommendations=[...latest.values()].filter(({rec})=>rec.status==='pending'&&!(deck.cards||[]).some(c=>norm(c.name)===norm(rec.card.name)&&(['main','commander'].includes(c.zone)||(c.zone==='maybe'&&!proposals.some(p=>norm(p.add)===norm(c.name))))));
+ const shown=new Set(recommendations.map(({rec})=>norm(rec.card.name)));
+ return {recommendations,proposals:proposals.filter(p=>!shown.has(norm(p.add))),plans:(deck.category_plans||[]).filter(p=>p.status==='pending')};
+}
+const api={groups,art,tile,groupName,recommendation,pendingDecisions};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.ForageCards=api;
 })(typeof window!=='undefined'?window:globalThis);

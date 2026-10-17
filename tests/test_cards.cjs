@@ -55,3 +55,16 @@ const matchGraphic=recommendation({...rec,kind:'match'});
 assert.match(matchGraphic,/COLLECTION MATCH/);assert.match(matchGraphic,/data-rec-action="find"/);
 assert.match(matchGraphic,/data-rec-action="pass"/);
 console.log('3 fallback-match graphic checks passed.');
+
+const {pendingDecisions}=require('../static/card-view.js');
+const pendingDeck={cards:[],chat:[{id:'first',recommendations:[rec]},{id:'latest',recommendations:[{...rec,id:'new'}]}],proposals:[{...proposed[0]}],category_plans:[{id:'plan',status:'pending'}]};
+const decisions=pendingDecisions(pendingDeck);
+assert.equal(decisions.recommendations.length,1);assert.equal(decisions.recommendations[0].message,'latest');
+assert.equal(decisions.proposals.length,0);assert.equal(decisions.plans.length,1);
+assert.equal(pendingDecisions({...pendingDeck,cards:[{...rec.card,zone:'main'}]}).recommendations.length,0);
+assert.equal(pendingDecisions({...pendingDeck,proposals:[],cards:[{...rec.card,zone:'maybe'}]}).recommendations.length,0);
+assert.equal(pendingDecisions({...pendingDeck,cards:[{...rec.card,zone:'maybe'}]}).recommendations.length,1);
+assert.equal(pendingDecisions({...pendingDeck,chat:[...pendingDeck.chat,{id:'pass',recommendations:[{...rec,status:'passed'}]}],proposals:[]}).recommendations.length,0);
+assert.equal(pendingDecisions({...pendingDeck,chat:[]}).proposals.length,1); // Legacy swaps remain reachable.
+assert.deepEqual(pendingDecisions({}),{recommendations:[],proposals:[],plans:[]});
+console.log('10 pending-decision checks passed.');

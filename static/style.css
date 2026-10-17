@@ -103,3 +103,10 @@
 .recommendation-card p{font-size:12px;line-height:1.55;overflow-wrap:anywhere}
 .recommendation-actions{display:flex;flex-wrap:wrap;gap:6px}
 .recommendation-actions .button{font-size:11px;padding:7px 9px}
+
+.chat-header-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:7px}
+.conversation>.panel-head{height:auto;min-height:62px;gap:10px;padding-top:10px;padding-bottom:10px;flex-wrap:wrap}
+#pending-decisions{cursor:pointer;white-space:nowrap}
+#pending-decisions.has-pending{color:var(--green,#c8e7b2);border-color:#6d865b}
+.pending-decisions-list .proposal-card{margin-bottom:12px}
+.pending-decisions-list .recommendation-pair>div{max-width:220px}

@@ -37,7 +37,7 @@ console.log('8 chat-scroll regression checks passed.');
  const rec={id:'r',card:candidate,status:'pending'},message={id:'m',recommendations:[rec]};
  const d={chat:[message],proposals:[proposal],cards:[{name:'Old Card',zone:'main'}]},draft={value:''},calls=[];
  const ctx={deck:()=>d,norm:s=>s.toLowerCase(),busy:false,pendingCard:null,pendingImage:null,$:()=>draft,
-  toast:()=>{},sendChat:async()=>calls.push(['chat',draft.value]),run:async fn=>fn(),mutate:async(...args)=>calls.push(args)};
+  toast:()=>{},closeModal:()=>{},sendChat:async()=>calls.push(['chat',draft.value]),run:async fn=>fn(),mutate:async(...args)=>calls.push(args)};
  vm.createContext(ctx);vm.runInContext(app.slice(app.indexOf('async function recommendationAction('),app.indexOf('function available(')),ctx);
  const button=action=>({dataset:{recAction:action},closest:s=>({dataset:s==='[data-rec-message]'?{recMessage:'m'}:{recId:'r'}})});
  await ctx.recommendationAction(button('different'));
@@ -48,3 +48,13 @@ console.log('8 chat-scroll regression checks passed.');
  await ctx.recommendationAction(button('maybe'));assert.equal(calls[3][0],'card');assert.equal(calls[3][1].zone,'maybe');
  console.log('8 graphical decision-action checks passed.');
 })().catch(error=>{console.error(error);process.exitCode=1});
+
+const pendingButton={textContent:'',classList:{toggle:(name,value)=>{pendingButton.highlight=value}}},dialog={open:false},title={textContent:''};
+let pendingShown=0;
+const pendingContext={ForageCards:require('../static/card-view.js'),deck:()=>({cards:[],chat:[],proposals:[{id:'old',status:'pending',add:'Candidate'}],category_plans:[{status:'pending'}]}),$:selector=>({'#pending-decisions':pendingButton,'#modal':dialog,'#modal-title':title})[selector],showPendingDecisions:()=>pendingShown++};
+vm.createContext(pendingContext);vm.runInContext(app.slice(app.indexOf('function renderProposals('),app.indexOf('function showPendingDecisions(')),pendingContext);
+pendingContext.renderProposals();assert.equal(pendingButton.textContent,'Pending decisions · 2');assert.equal(pendingButton.highlight,true);
+dialog.open=true;title.textContent='Pending decisions';pendingContext.renderProposals();assert.equal(pendingShown,1);
+pendingContext.deck=()=>({cards:[],chat:[],proposals:[]});pendingContext.renderProposals();assert.equal(pendingButton.textContent,'Pending decisions · 0');assert.equal(pendingButton.highlight,false);
+const index=fs.readFileSync(require.resolve('../static/index.html'),'utf8');assert.ok(!index.includes('proposal-section'));assert.ok(index.includes('id="pending-decisions"'));assert.ok(!index.includes('id="proposals"'));
+console.log('8 pending-decision header/layout checks passed.');

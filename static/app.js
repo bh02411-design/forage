@@ -119,7 +119,7 @@ async function recommendationAction(button){
  if(action==='find'||action==='different'){
   if($('#message').value.trim()||pendingCard||pendingImage){toast('Send or clear your current draft first.');return}
   const request=`Find one concrete swap to add ${c.name} to my current mainboard. Keep ${c.name} as the addition. ${action==='different'&&p?`Suggest a different cut from ${p.cut}; I have not accepted that swap.`:'Compare my current cards and suggest the best cut.'} Explain the tradeoff and return a structured swap proposal.`;
-  $('#message').value=request;await sendChat();return;
+  closeModal();$('#message').value=request;await sendChat();return;
  }
  await run(async()=>{
   button.disabled=true;
@@ -132,7 +132,21 @@ async function recommendationAction(button){
  });
 }
 function available(name,excludeActive=false){const owned=state.collection.filter(c=>norm(c.name)===norm(name)).reduce((n,c)=>n+c.qty,0),assigned=state.decks.filter(d=>!excludeActive||d.id!==state.active).flatMap(d=>d.cards).filter(c=>['main','commander'].includes(c.zone)&&norm(c.name)===norm(name)).reduce((n,c)=>n+c.qty,0);return {owned,assigned,free:Math.max(0,owned-assigned)}}
-function renderProposals(){const list=deck().proposals.filter(p=>p.status==='pending');$('#proposals').innerHTML=list.map(p=>{const a=available(p.add,true);return `<article class="proposal-card"><div class="proposal-tag">PROPOSED SWAP</div><div class="swap-line"><span>＋</span>${esc(p.add)}</div><div class="swap-line cut"><span>−</span>${esc(p.cut)}</div><p>${esc(p.reason)}</p><div class="availability">${state.collection.length?`${a.owned} owned · ${a.free} available outside other decks`:'Ownership unknown · import your collection'}</div><div class="proposal-actions"><button data-accept="${p.id}" class="button primary">Accept swap ↗</button><button data-reject="${p.id}" class="button secondary">Skip</button></div></article>`}).join('')||'<div class="empty">No pending swaps. Ask Forage for a recommendation.</div>';
+function renderProposals(){
+ const pending=ForageCards.pendingDecisions(deck()),count=pending.recommendations.length+pending.proposals.length+pending.plans.length;
+ $('#pending-decisions').textContent='Pending decisions · '+count;
+ $('#pending-decisions').classList.toggle('has-pending',count>0);
+ if($('#modal').open&&$('#modal-title').textContent==='Pending decisions')showPendingDecisions();
+}
+function showPendingDecisions(){
+ const pending=ForageCards.pendingDecisions(deck());
+ const graphics=pending.recommendations.map(({message,rec})=>`<section data-rec-message="${esc(message)}">${ForageCards.recommendation(rec,state.collection,deck().cards,deck().proposals)}</section>`).join('');
+ modal('Pending decisions',`<div class="pending-decisions-list">${graphics}<div id="proposals"></div></div>`);
+ $$('[data-rec-action]').forEach(b=>b.onclick=()=>recommendationAction(b));
+ $$('.recommendation-art img').forEach(img=>img.onerror=()=>{img.hidden=true;img.closest('.recommendation-art').classList.add('image-failed')});
+ renderPendingProposals(pending.proposals,!!graphics);bindWorkspacePlans();
+}
+function renderPendingProposals(list,hasGraphics=false){$('#proposals').innerHTML=list.map(p=>{const a=available(p.add,true);return `<article class="proposal-card"><div class="proposal-tag">PROPOSED SWAP</div><div class="swap-line"><span>＋</span>${esc(p.add)}</div><div class="swap-line cut"><span>−</span>${esc(p.cut)}</div><p>${esc(p.reason)}</p><div class="availability">${state.collection.length?`${a.owned} owned · ${a.free} available outside other decks`:'Ownership unknown · import your collection'}</div><div class="proposal-actions"><button data-accept="${p.id}" class="button primary">Accept swap ↗</button><button data-reject="${p.id}" class="button secondary">Skip</button></div></article>`}).join('')||(!hasGraphics?'<div class="empty">No pending decisions. New suggestions will appear in your conversation.</div>':'');
  const pendingPlans=(deck().category_plans||[]).filter(p=>p.status==='pending');if(pendingPlans.length&&!list.length)$('#proposals').innerHTML='';if(pendingPlans.length)$('#proposals').insertAdjacentHTML('beforeend',pendingPlans.map(p=>'<article class="proposal-card">'+workspacePlanMarkup(p)+'</article>').join(''));
  $$('[data-accept]').forEach(b=>b.onclick=()=>run(async()=>{b.disabled=true;await mutate('proposal',{id:b.dataset.accept,action:'accept'});toast('Swap accepted. Saved to decision history.');}));
  $$('[data-reject]').forEach(b=>b.onclick=()=>{modal('Skip this suggestion',`<p class="modal-note">An optional reason helps future recommendations. A blank reason records this decision without inventing a preference.</p><label class="field">Your reason<textarea id="reject-reason" placeholder="For example: I need this independent Food producer."></textarea></label><button id="confirm-reject" class="button primary">Skip suggestion</button>`);$('#confirm-reject').onclick=()=>run(async()=>{await mutate('proposal',{id:b.dataset.reject,action:'reject',feedback:$('#reject-reason').value});closeModal();toast('Decision saved.');});});
@@ -193,6 +207,7 @@ $('#deck-select').onchange=e=>run(()=>mutate('active',{id:e.target.value}));
 $('#new-deck').onclick=()=>{modal('Start another deck','<label class="field">Deck name<input id="new-name" placeholder="Terra · Reanimator"></label><button id="create-deck" class="button primary">Create deck</button>');$('#create-deck').onclick=()=>run(async()=>{await mutate('new-deck',{name:$('#new-name').value});closeModal();changeView('workbench')})};
 $('#deck-search').oninput=renderDeck;$('#collection-search').oninput=()=>{collectionLimit=60;renderCollection()};
 $$('[data-zone]').forEach(b=>b.onclick=()=>{zone=b.dataset.zone;$$('[data-zone]').forEach(x=>x.classList.toggle('active',x===b));renderDeck()});
+$('#pending-decisions').onclick=showPendingDecisions;
 $('#settings-open').onclick=settingsDialog;$('#setup-link').onclick=settingsDialog;$('#ai-status').onclick=settingsDialog;
 $('#import-open').onclick=()=>importDialog(view==='collection'?'collection':'deck');$('#collection-import').onclick=()=>importDialog('collection');$('#lookup-open').onclick=lookupDialog;$('#deck-drop').onclick=lookupDialog;
 $('#add-memory').onclick=()=>memoryDialog();$('#enrich').onclick=()=>run(enrichDeck);
