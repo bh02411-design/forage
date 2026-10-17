@@ -22,7 +22,7 @@ console.log(tests.length+' search queries and 17 error/missing-data checks passe
 // Exercise actual collection rendering: match printings before merging their names.
 const app=fs.readFileSync(require.resolve('../static/app.js'),'utf8'),elements={},tiles=[];
 const element=selector=>elements[selector]??(elements[selector]={value:'s:blb',classList:{toggle:()=>{}},setAttribute:()=>{},hidden:false});
-const ctx={state:{collection:[{...cards[0],qty:1,set:'mh3'},{...cards[0],id:'other-print',qty:3,set:'blb'}],collection_source:'Test'},$:element,$$:()=>[],norm:s=>s.toLowerCase(),esc:s=>String(s),collectionLimit:60,collectionMode:'grid',filterStatus:()=>{},available:()=>({owned:4,free:4}),bindVisualCards:()=>{},ForageCards:{...Cards,tile:c=>{tiles.push(c);return c.name}}};
+const ctx={state:{collection:[{...cards[0],qty:1,set:'mh3'},{...cards[0],id:'other-print',qty:3,set:'blb'}],collection_source:'Test'},$:element,$$:()=>[],norm:s=>s.toLowerCase(),esc:s=>String(s),collectionLimit:60,collectionMode:'grid',collectionSort:'name',collectionDirection:'asc',filterStatus:()=>{},available:()=>({owned:4,free:4}),bindVisualCards:()=>{},ForageCards:{...Cards,tile:c=>{tiles.push(c);return c.name}}};
 vm.createContext(ctx);vm.runInContext(app.slice(app.indexOf('function renderCollection('),app.indexOf('function cardPreview(')),ctx);ctx.renderCollection();
 assert.equal(tiles.length,1);assert.equal(tiles[0].qty,3);assert.equal(tiles[0].set,'blb');
 console.log('3 printing-aware collection integration checks passed.');

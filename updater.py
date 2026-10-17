@@ -11,6 +11,7 @@ MAX_PACKAGE=20*1024*1024
 
 # Release notes stay in an existing updater file so older installers accept the package.
 CHANGELOG={
+ '0.2.15':['Add collection sorting by name, mana value, color identity, type, rarity, owned quantity and available quantity.','Remember ascending/descending preferences across visits; keep unresolved values last.'],
  '0.2.14':['Add common local Scryfall-style filters on deck and collection views.','Add clickable syntax keys, missing-data notices and explicit unsupported-query errors.'],
  '0.2.13':['Replace the generic Windows tray icon with Forage’s green eight-spoke mark on a dark background.'],
  '0.2.12':['Add Windows system tray mode with Open Forage, Start with Windows and Quit controls.','Add in-app setup and a Start-menu shortcut; run quietly without a persistent console window.'],

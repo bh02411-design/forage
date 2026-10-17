@@ -105,5 +105,30 @@ function compileSearch(query){
  if(!tokens.length)return ()=>true;const filter=expr();if(pos!==tokens.length)throw Error('Check the search parentheses.');return filter;
 }
 function search(cards,query){try{const test=compileSearch(query),matches=[];let unknown=0;for(const c of cards){const result=test(c);if(result===true)matches.push(c);else if(result===null)unknown++}return {matches,unknown,error:null}}catch(error){return {matches:[],unknown:0,error:error.message}}}
-const api={groups,art,tile,groupName,recommendation,pendingDecisions,search,compileSearch};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.ForageCards=api;
+function inventory(collection=[],decks=[]){
+ const counts=new Map(),entry=name=>{const k=norm(name);if(!counts.has(k))counts.set(k,{owned:0,assigned:0,free:0});return counts.get(k)};
+ for(const c of collection)entry(c.name).owned+=Number(c.qty)||0;
+ for(const deck of decks)for(const c of deck.cards||[])if(['main','commander'].includes(c.zone))entry(c.name).assigned+=Number(c.qty)||0;
+ for(const item of counts.values())item.free=Math.max(0,item.owned-item.assigned);
+ return counts;
+}
+function sortCollection(cards,by='name',direction='asc',counts=new Map()){
+ const collator=new Intl.Collator(undefined,{numeric:true,sensitivity:'base'}),sign=direction==='desc'?-1:1;
+ const ranks={common:0,uncommon:1,rare:2,mythic:3,special:4,bonus:5},colors='WUBRG';
+ const value=c=>{
+  if(by==='mana')return c.mv==null||c.mv===''||!Number.isFinite(Number(c.mv))?null:Number(c.mv);
+  if(by==='color'){if(!Array.isArray(c.color_identity))return null;const ci=[...new Set(c.color_identity)].sort((a,b)=>colors.indexOf(a)-colors.indexOf(b));return ci.length+':'+ci.map(c=>colors.indexOf(c)).join('')}
+  if(by==='type'){if(c.land)return 'Land';if(!c.type_line)return null;return ['Creature','Planeswalker','Instant','Sorcery','Enchantment','Artifact','Battle','Land'].find(t=>c.type_line.includes(t))||c.type_line.split('—')[0].trim()}
+  if(by==='rarity')return ranks[c.rarity]??null;
+  if(by==='owned')return counts.get(norm(c.name))?.owned??(Number(c.qty)||0);
+  if(by==='available')return counts.get(norm(c.name))?.free??null;
+  return c.name;
+ };
+ return cards.map(card=>({card,value:value(card)})).sort((a,b)=>{
+  if(a.value==null&&b.value!=null)return 1;if(b.value==null&&a.value!=null)return -1;
+  let result=a.value==null?0:typeof a.value==='number'&&typeof b.value==='number'?a.value-b.value:collator.compare(String(a.value),String(b.value));
+  return result*sign||collator.compare(a.card.name,b.card.name);
+ }).map(row=>row.card);
+}
+const api={groups,art,tile,groupName,recommendation,pendingDecisions,search,compileSearch,inventory,sortCollection};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.ForageCards=api;
 })(typeof window!=='undefined'?window:globalThis);

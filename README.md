@@ -74,6 +74,11 @@ History uses published releases from your configured GitHub repository. Cached h
 
 ### Changelog
 
+**0.2.15**
+
+- Add seven collection sort options and ascending/descending controls.
+- Remember sort choices and keep missing metadata at the end.
+
 **0.2.14**
 
 - Add local Scryfall-style filters and clickable syntax keys to deck and collection search.
@@ -158,3 +163,5 @@ Logs are written to `data/forage.log` (or your configured data directory); the p
 Deck and collection filters support common Scryfall-style syntax: `o:draw`, `o:"sacrifice a creature"`, `t:creature`, `mv<=3` (`cmc` alias), `pow<=3`, `tou>=4`, `id<=bg`, `id=wbr`, `c:r`, `c=0`, `s:blb`, `r:rare`, `kw:flying`, `f:commander`, and `is:mdfc`. Combine terms with spaces/AND, OR and parentheses, and exclude with `-` or NOT. Use `!"Exact Card Name"` for an exact name. `role:`, `group:` and `qty>=2` are Forage extras. Plain words retain Forage’s broad name/rules/type/role matching.
 
 Each search has a **Syntax key** with clickable examples. This is a local subset, not the entire Scryfall query engine: unsupported fields, Tagger tags, regex and price queries produce clear errors. Missing metadata stays unknown even under negation, with a notice to Resolve card data. Scryfall card colors are stored separately from color identity; existing records may need resolving once for the added fields. Printing-level filters run before collection rows merge; name-only imports may use a different Scryfall printing than the physical copy, and commanders stay pinned in deck views. New metadata is kept out of AI prompts.
+
+The collection toolbar includes Sort and Order controls for Name, Mana value, Color identity, Type, Rarity, Owned quantity and Available quantity. Both card and table views share the selected order, remembered on this browser. Sorting happens after filtering and before pagination. Unresolved values remain last in either direction; ties use name order. Quantity sorts use total owned copies across printings and remaining unassigned copies across imported mainboards/commanders. Considering does not reserve copies.

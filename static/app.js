@@ -6,7 +6,9 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const norm=s=>s.toLowerCase().split(' // ')[0].replace(/[^a-z0-9]/g,'');
 const uiRead=(k,fallback)=>{try{return localStorage.getItem('forage.'+k)||fallback}catch{return fallback}};
 const uiSave=(k,v)=>{try{localStorage.setItem('forage.'+k,v)}catch{}};
-let cardMode=uiRead('cardMode','stacks'),groupBy=uiRead('groupBy','category'),sortBy=uiRead('sortBy','name'),collectionMode=uiRead('collectionMode','grid'),collectionLimit=60,deckExpanded=false;
+let cardMode=uiRead('cardMode','stacks'),groupBy=uiRead('groupBy','category'),sortBy=uiRead('sortBy','name'),collectionMode=uiRead('collectionMode','grid'),collectionSort=uiRead('collectionSort','name'),collectionDirection=uiRead('collectionDirection','asc'),collectionLimit=60,deckExpanded=false;
+if(!['name','mana','color','type','rarity','owned','available'].includes(collectionSort))collectionSort='name';
+if(!['asc','desc'].includes(collectionDirection))collectionDirection='asc';
 if(!['stacks','grid','list'].includes(cardMode))cardMode='stacks';
 if(!['category','type','mana','color'].includes(groupBy))groupBy='category';
 if(!['name','mana'].includes(sortBy))sortBy='name';
@@ -173,15 +175,17 @@ function renderMemory(){const entries=state.memories.filter(m=>m.scope==='global
 function renderCollection(){
  const q=$('#collection-search').value;$('#collection-source').textContent=state.collection_source;
  const result=ForageCards.search(state.collection,q);filterStatus('collection',result,q);
+ const counts=ForageCards.inventory(state.collection,state.decks||[]),stock=name=>counts.get(norm(name))||{owned:0,assigned:0,free:0};
  const merged=new Map();for(const c of result.matches){const k=norm(c.name);if(!merged.has(k))merged.set(k,{...c});else merged.get(k).qty+=c.qty}
- const matches=[...merged.values()].sort((a,b)=>a.name.localeCompare(b.name));
+ const matches=ForageCards.sortCollection([...merged.values()],collectionSort,collectionDirection,counts);
+ $('#collection-sort').value=collectionSort;$('#collection-direction').value=collectionDirection;
  const cards=matches.slice(0,collectionLimit);
  $('#collection-results').textContent=`${matches.length.toLocaleString()} unique matches · showing ${cards.length}`;
  $('#collection-grid').hidden=collectionMode!=='grid';$('#collection-table-wrap').hidden=collectionMode!=='list';
- $('#collection-grid').innerHTML=cards.map(c=>ForageCards.tile(c,state.collection,'collection',available(c.name))).join('')||'<div class="empty">Import your collection, or try a different search.</div>';
+ $('#collection-grid').innerHTML=cards.map(c=>ForageCards.tile(c,state.collection,'collection',stock(c.name))).join('')||'<div class="empty">Import your collection, or try a different search.</div>';
  // For duplicate printing rows, the visual tile carries the first record id but shows the summed quantity.
  bindVisualCards($('#collection-grid'));
- $('#collection-table').innerHTML=cards.map(c=>{const a=available(c.name);return `<tr><td>${esc(c.name)}</td><td>${a.owned}</td><td>${a.assigned}</td><td>${a.free}</td></tr>`}).join('')||'<tr><td colspan="4" class="empty">No matching cards.</td></tr>';
+ $('#collection-table').innerHTML=cards.map(c=>{const a=stock(c.name);return `<tr><td>${esc(c.name)}</td><td>${a.owned}</td><td>${a.assigned}</td><td>${a.free}</td></tr>`}).join('')||'<tr><td colspan="4" class="empty">No matching cards.</td></tr>';
  $$('[data-collection-mode]').forEach(b=>b.classList.toggle('selected',b.dataset.collectionMode===collectionMode));
  $('#collection-more').hidden=matches.length<=collectionLimit;
 }
@@ -256,6 +260,8 @@ $('#card-size').value=savedSize;document.documentElement.style.setProperty('--ca
 $('#card-size').oninput=e=>{document.documentElement.style.setProperty('--card-width',e.target.value+'px');uiSave('cardSize',e.target.value)};
 $('#focus-deck').onclick=()=>{deckExpanded=!deckExpanded;$('.workspace').classList.toggle('deck-expanded',deckExpanded);$('#focus-deck').textContent=deckExpanded?'Show conversation ↙':'Expand deck ↗';$('#focus-deck').setAttribute('aria-pressed',String(deckExpanded));hideCardHover();if(!deckExpanded)renderChat(true)};
 $$('[data-collection-mode]').forEach(b=>b.onclick=()=>{collectionMode=b.dataset.collectionMode;uiSave('collectionMode',collectionMode);renderCollection()});
+$('#collection-sort').onchange=e=>{collectionSort=e.target.value;uiSave('collectionSort',collectionSort);collectionLimit=60;renderCollection()};
+$('#collection-direction').onchange=e=>{collectionDirection=e.target.value;uiSave('collectionDirection',collectionDirection);collectionLimit=60;renderCollection()};
 $('#collection-more').onclick=()=>{collectionLimit+=60;renderCollection()};
 $$('[data-zone]').forEach(tab=>{tab.addEventListener('dragover',e=>{if(e.dataTransfer.types.includes('application/x-forage-card')){e.preventDefault();tab.classList.add('dragover')}});tab.addEventListener('dragleave',()=>tab.classList.remove('dragover'));tab.addEventListener('drop',e=>{const raw=e.dataTransfer.getData('application/x-forage-card');if(!raw)return;e.preventDefault();e.stopPropagation();tab.classList.remove('dragover');run(()=>internalDrop(JSON.parse(raw),tab.dataset.zone))})});
 $('#deck-list').addEventListener('scroll',hideCardHover);window.addEventListener('resize',hideCardHover);window.addEventListener('scroll',hideCardHover,true);
