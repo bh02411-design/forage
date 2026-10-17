@@ -1,0 +1,39 @@
+name: Test and publish Forage release
+on:
+  push:
+    tags: ['v[0-9]*.[0-9]*.[0-9]*']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify version and select release tag
+        run: |
+          python - <<'PY'
+          import json, os, re
+          version = json.load(open('version.json'))['version']
+          assert re.fullmatch(r'\d+\.\d+\.\d+', version)
+          tag = 'v' + version
+          if os.environ['GITHUB_REF_TYPE'] == 'tag':
+              assert os.environ['GITHUB_REF_NAME'] == tag
+          with open(os.environ['GITHUB_ENV'], 'a') as env:
+              env.write('RELEASE_TAG=' + tag + '\n')
+          PY
+      - run: python -m unittest discover -s tests -p 'test*.py'
+      - run: node --check static/app.js
+      - run: node tests/test_cards.cjs
+      - run: node tests/test_render.cjs
+      - run: python build_release.py --output dist/Forage-update.zip
+      - name: Publish release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$RELEASE_TAG" dist/Forage-update.zip --target "$GITHUB_SHA" --generate-notes

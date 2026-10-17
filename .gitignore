@@ -1,0 +1,6 @@
+data/
+__pycache__/
+*.pyc
+dist/
+*.sqlite3*
+*.update-tmp

@@ -1,0 +1,13 @@
+const assert=require('node:assert/strict');
+const {cleanReply,render}=require('../static/render.js');
+assert.equal(cleanReply('{"reply":"Hello\\n\\n**World**"}, "proposals": []'),'Hello\n\n**World**');
+assert.equal(cleanReply('{"reply":"Say \\"hello\\".","broken":['),'Say "hello".');
+assert.equal(render('Hello\n\n**World**'),'<p>Hello</p><p><strong>World</strong></p>');
+assert.match(render('1. First\n2. Second'),/<ol><li>First<\/li><li>Second<\/li><\/ol>/);
+assert.match(render('- One\n- Two'),/<ul>/);
+assert.equal(render('<img src=x onerror=alert(1)>'),'<p>&lt;img src=x onerror=alert(1)&gt;</p>');
+assert.equal(render('`<script>`'),'<p><code>&lt;script&gt;</code></p>');
+assert.ok(!render('{bad json').includes('{bad json'));
+console.log('8 chat-rendering checks passed.');
+assert.ok(!render('<|tool_call>call:collection_search{query:draw}<tool_call|>').includes('<|tool_call>'));
+console.log('Saved tool-request display check passed.');

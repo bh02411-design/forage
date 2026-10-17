@@ -1,2 +1,59 @@
-# forage
-Local-first Commander deck builder with collection-aware AI and verified application updates.
+# Forage
+
+A local-first Commander deck builder with collection-aware AI, editable preferences, image/link drops, visual card categories, and verified application updates. New workspaces start empty. Decks, collection, chats and saved preferences live in the local `data` folder.
+
+## Install and start
+
+Extract the application into a writable folder. Install Python 3.10 or newer if needed, then run **Start-Forage.bat** on Windows. No pip dependencies are required. Keep its terminal open. On macOS/Linux run `python3 launcher.py --open`. Forage serves only on `127.0.0.1`, normally port 8765. Use `--port 8766` if needed.
+
+Import a deck and collection separately. Use **Resolve card data** to retrieve Oracle text, costs, colors, power and images from Scryfall. Collection lookups run in resumable batches; unknown facts remain unknown. Import other decks to account for assigned physical copies. Membership in a deck is not proof of ownership.
+
+## Local AI
+
+Load a chat model in LM Studio and start its local server. Open **Local AI & settings**, use `http://127.0.0.1:1234/v1`, list the models, choose one and save. Only loopback HTTP AI endpoints are accepted. The application does not connect to paid cloud inference.
+
+Requests include the active deck, saved preferences, recent conversation, relevant earlier excerpts and collection search results. Automatic prompt compaction reduces reference data before conversation history and adapts to context-overflow errors. Model reasoning quality still varies. See **LOCAL-MODEL-CHECK.md** for live tests.
+
+Ability searches match Oracle words rather than card-name fragments or editable role tags. Existing mainboard/commander cards are excluded from addition searches except explicit ownership lookups. Known off-color and banned cards are filtered. Unknown metadata and unavailable copies are flagged. Search ordering is a retrieval hint, not a strategic rating.
+
+Structured additions and swaps are checked against supplied facts, ownership, availability, current membership, known identity/legality, costs and protected cuts. Draw recommendations require a manifest or an explanation of insufficient evidence. An invalid answer gets one correction attempt and is then withheld if still invalid. These checks do not prove every prose claim or strategic conclusion. **Context used** exposes actual messages, searches and checked evidence.
+
+## Working with cards
+
+Switch between stacks, grid and list; group by category, type, mana or color. Category headings support rename/create/move/merge operations. AI changes are proposals until you apply them. Undo restores prior deck edits. Role tags support overlapping functions independently of display categories. Considering is separate from the mainboard.
+
+Drop Scryfall/EDHREC card links or image drags with recognizable identity into the deck or composer. Review recognized names before adding. Screenshot recognition needs a local vision model; manual names also work. Cross-site drag behavior depends on the browser.
+
+Explicit preference statements produce a **Remember** suggestion. Save it to retain the preference across conversations. Memories can apply to one deck or globally and can be edited or deleted. A bare yes/no is not automatically saved as a permanent preference.
+
+Use Backup to export the local workspace. Restore creates an additional local copy before replacing data. No live database, chat history, personal deck export or local preferences belong in this repository or a release asset.
+
+## Updates
+
+The default release repository is `bh02411-design/forage`. Open **Local AI & settings → Application updates** to change the trusted public source, check now, or enable checks on launch. No GitHub credentials are stored. Only repository/version requests go to GitHub; local workspace contents are not uploaded.
+
+**Update and restart** verifies the GitHub asset SHA-256, manifest, individual hashes, supported paths, version and Python syntax. The launcher stops the server before replacing application files. The allowlist excludes `data`. Previous code and a SQLite workspace snapshot are retained in `data/updates/backups`.
+
+Interrupted installation is recovered before launching. If the updated server fails its startup check, the previous code is restored. **Roll back application** restores code while preserving current workspace data. Snapshots are available for manual recovery. Format-1 releases must remain compatible with the existing database; schema-breaking migrations need a separate upgrade path.
+
+Checksums verify integrity relative to the configured release source; they are not independent publisher signatures. Trust that repository. Start with the launcher, not `server.py`, to enable supervised installation. Wait for active conversations/imports to finish before restarting.
+
+For the one-time updater installation, stop Forage, replace program files from the downloaded bootstrap ZIP, preserve the existing `data` folder, and launch **Start-Forage.bat**. Existing local decks, chats and memories remain unchanged. Older installations with a saved empty release source should enter `bh02411-design/forage` once.
+
+## Development and releases
+
+The repository root contains the application. `.gitignore` excludes local data, caches, databases and builds. The bundled tests use synthetic workspaces, not personal deck snapshots.
+
+Run:
+
+```sh
+python -m unittest discover -s tests -p 'test*.py'
+node --check static/app.js
+node tests/test_cards.cjs
+node tests/test_render.cjs
+python build_release.py --output dist/Forage-update.zip
+```
+
+Increase the stable version in `version.json` before a release. Push a matching `vMAJOR.MINOR.PATCH` tag or use **Actions → Test and publish Forage release → Run workflow**. The workflow tests, builds and publishes `Forage-update.zip` using the repository's built-in token. The updater requires GitHub to supply a SHA-256 digest for the release asset. Application releases contain code only.
+
+Lifecycle tests cover installation, restart, manual rollback, failed-server recovery, archive rejection, and preservation of live data. Supervisor process tests run in Linux CI; Windows launch and live GitHub downloads also need environment-specific verification.
