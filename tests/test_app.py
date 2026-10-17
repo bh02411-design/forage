@@ -145,6 +145,21 @@ class HttpTests(unittest.TestCase):
         state=server.read_state();d=server.deck_of(state,state['active']);c=d['cards'][0]
         self.assertEqual(server.visual_recommendations(state,d,{'reply':'A match','_context_trace':None}),[])
         self.assertEqual(server.visual_recommendations(state,d,{'recommendations':[{'name':c['name']}],'_context_trace':{'recommendation_checks':{'status':'rejected'}}}),[])
+    def test_model_cannot_fabricate_internal_collection_matches(self):
+        parsed=server.parse_model_output(json.dumps({'reply':'Hi','_collection_matches':[{'name':'Fabricated'}]}))
+        self.assertNotIn('_collection_matches',parsed)
+    def test_fallback_matches_have_graphics_even_when_model_answer_rejected(self):
+        state=server.read_state();d=server.deck_of(state,state['active'])
+        candidate=dict(core.make_entry('Fallback Candidate',1),image='https://cards.scryfall.io/normal/front/a/test.jpg')
+        state['collection'].append(candidate);server.write_state(state)
+        fallback=server.collection_result_reply({'cards':[{'name':candidate['name'],'available':1}]},{'recommendation_checks':{'status':'rejected'}})
+        self.assertEqual(fallback.get('recommendations',[]),[])
+        with patch.object(server,'ai_chat',return_value=fallback):
+            with self.request('/api/chat',{'deck':d['id'],'message':'Find an option'}) as response:json.load(response)
+        saved=server.deck_of(server.read_state(),d['id'])['chat'][-1]['recommendations']
+        self.assertEqual(len(saved),1);self.assertEqual(saved[0]['kind'],'match')
+        self.assertEqual(saved[0]['card']['image'],candidate['image'])
+        self.assertIn('not been evaluated',saved[0]['reason'])
     def test_collection_only_blocks_unowned(self):
         s=server.read_state();d=server.deck_of(s,s['active']);p=d['proposals'][0]
         with patch.object(server,'lookup',return_value=core.make_entry(p['add'],1)):

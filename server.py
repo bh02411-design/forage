@@ -18,16 +18,18 @@ LOCK=threading.RLock(); API_LOCK=threading.Lock(); LAST_CALL=0
 
 def visual_recommendations(state,deck,result):
     """UI metadata comes from the local catalog, never model-provided artwork."""
-    if (result.get('_context_trace') or {}).get('recommendation_checks',{}).get('status')=='rejected':return []
+    rejected=(result.get('_context_trace') or {}).get('recommendation_checks',{}).get('status')=='rejected'
+    matches=result.get('_collection_matches',[])
+    additions=[] if rejected else result.get('recommendations',[])+result.get('proposals',[])
     known=catalog(state,deck);rows=[];seen=set()
-    for item in result.get('recommendations',[])+result.get('proposals',[]):
+    for item in additions+matches:
         if not isinstance(item,dict):continue
         name=item.get('name',item.get('add',''))
         if not isinstance(name,str):continue
         k=key(name);card=known.get(k)
         if not card or k in seen:continue
         seen.add(k)
-        rows.append({'id':uid(),'card':copy.deepcopy(card),'reason':str(item.get('reason',''))[:2000],'status':'pending'})
+        rows.append({'id':uid(),'card':copy.deepcopy(card),'reason':str(item.get('reason',''))[:2000],'status':'pending','kind':'match' if item in matches else 'recommendation'})
     return rows
 
 def db():
@@ -219,7 +221,8 @@ def collection_result_reply(result,trace=None):
         text=c.get('oracle_text') or 'Rules text unresolved.'
         lines.append('**'+c['name']+'** — '+cost+'; '+str(c.get('available',0))+' available.\n'+excerpt(text,600))
     lines.append('Cards already in the mainboard/commander are excluded from recommendation searches. Exact-name ownership lookups are identified separately.')
-    return {'reply':'\n\n'.join(lines),'proposals':[],'memory_suggestions':[],'_context_trace':trace}
+    return {'reply':'\n\n'.join(lines),'proposals':[],'memory_suggestions':[],'_context_trace':trace,
+            '_collection_matches':[{'name':c['name'],'reason':'Local collection match only. Strategic fit has not been evaluated; inspect the card or ask for a swap.'} for c in result.get('cards',[])[:8]]}
 
 def parse_model_output(answer):
     """Recover the reply even when a model appends fields outside the JSON object."""
@@ -233,6 +236,7 @@ def parse_model_output(answer):
         data,_=decoder.raw_decode(clean)
         if isinstance(data,dict) and (isinstance(data.get('reply'),str) or isinstance(data.get('collection_search'),dict)):
             if isinstance(data.get('reply'),str):data['reply']=data['reply'].replace('\\n','\n')
+            data.pop('_collection_matches',None)  # Reserved for actual local search results.
             return data
     except ValueError:pass
     # A valid reply string can survive an otherwise malformed/truncated envelope.
@@ -480,7 +484,7 @@ class Handler(BaseHTTPRequestHandler):
         file=(ROOT/'static'/path.lstrip('/')).resolve()
         if file.parent!=ROOT/'static' or not file.is_file(): return self.send_json({'error':'Not found'},404)
         self.send_response(200); self.send_header('Content-Type',{'.html':'text/html; charset=utf-8','.css':'text/css','.js':'text/javascript'}.get(file.suffix,'application/octet-stream'))
-        self.send_header('X-Content-Type-Options','nosniff'); self.send_header('Referrer-Policy','no-referrer'); self.send_header('Content-Security-Policy',"default-src 'self'; img-src 'self' data: https://cards.scryfall.io; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'")
+        self.send_header('Cache-Control','no-store'); self.send_header('X-Content-Type-Options','nosniff'); self.send_header('Referrer-Policy','no-referrer'); self.send_header('Content-Security-Policy',"default-src 'self'; img-src 'self' data: https://cards.scryfall.io; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'")
         self.end_headers(); self.wfile.write(file.read_bytes())
     def do_POST(self):
         global ACTIVE_WRITES

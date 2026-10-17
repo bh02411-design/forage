@@ -50,3 +50,8 @@ assert.ok(!recommendation({...rec,status:'passed'},[],cards,proposed).includes('
 assert.match(recommendation(rec,[],[{...rec.card,zone:'main'}],proposed),/In mainboard/);
 assert.ok(!recommendation({...rec,card:{...rec.card,image:'javascript:alert(1)'}}).includes('javascript:'));
 console.log('11 graphical recommendation checks passed.');
+
+const matchGraphic=recommendation({...rec,kind:'match'});
+assert.match(matchGraphic,/COLLECTION MATCH/);assert.match(matchGraphic,/data-rec-action="find"/);
+assert.match(matchGraphic,/data-rec-action="pass"/);
+console.log('3 fallback-match graphic checks passed.');
