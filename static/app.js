@@ -98,10 +98,38 @@ function renderChat(forceLatest=false){
  const body=$('#conversation-body'),deckId=state.active,previousTop=body.scrollTop;
  const followLatest=forceLatest||chatRenderedDeck!==deckId||body.scrollHeight-body.scrollTop-body.clientHeight<=60;
  $('#welcome').hidden=!!deck().chat.length;
- $('#messages').innerHTML=deck().chat.map(m=>`<article class="message ${m.role==='user'?'user':'assistant'}"><div class="message-heading"><div class="message-label">${m.role==='user'?'YOU':'FORAGE · LOCAL AI'}</div>${m.context_trace?`<button class="context-inspect" data-context-message="${m.id}">Context used · ${(m.context_trace.recent_messages||[]).length} messages</button>`:''}</div><div class="message-content">${ForageText.render(m.text)}</div>${m.category_plan_id?workspacePlanMarkup((deck().category_plans||[]).find(p=>p.id===m.category_plan_id)):''}${(m.memory_suggestions||[]).map(s=>`<button class="memory-save" data-save-memory="${s.id}" data-message="${m.id}">Remember: ${esc(s.text)}</button>`).join('')}</article>`).join('');
+ $('#messages').innerHTML=deck().chat.map(m=>`<article class="message ${m.role==='user'?'user':'assistant'}"><div class="message-heading"><div class="message-label">${m.role==='user'?'YOU':'FORAGE · LOCAL AI'}</div>${m.context_trace?`<button class="context-inspect" data-context-message="${m.id}">Context used · ${(m.context_trace.recent_messages||[]).length} messages</button>`:''}</div><div class="message-content">${ForageText.render(m.text)}</div>${m.role==='assistant'&&(m.recommendations||[]).length?`<section class="recommendation-tray" aria-label="Recommended additions" data-rec-message="${esc(m.id)}"><h3>Recommended additions</h3>${m.recommendations.map(r=>ForageCards.recommendation(r,state.collection,deck().cards,deck().proposals)).join('')}</section>`:''}${m.category_plan_id?workspacePlanMarkup((deck().category_plans||[]).find(p=>p.id===m.category_plan_id)):''}${(m.memory_suggestions||[]).map(s=>`<button class="memory-save" data-save-memory="${s.id}" data-message="${m.id}">Remember: ${esc(s.text)}</button>`).join('')}</article>`).join('');
+ $$('[data-rec-action]').forEach(b=>b.onclick=()=>recommendationAction(b));
+ $$('.recommendation-art img').forEach(img=>img.onerror=()=>{img.hidden=true;img.closest('.recommendation-art').classList.add('image-failed')});
  $$('[data-context-message]').forEach(b=>b.onclick=()=>showContextUsed(b.dataset.contextMessage));
  $$('[data-save-memory]').forEach(b=>b.onclick=async()=>{const m=deck().chat.find(m=>m.id===b.dataset.message).memory_suggestions.find(s=>s.id===b.dataset.saveMemory);if(!state.memories.some(x=>x.text===m.text)){await mutate('memory',{text:m.text,scope:m.scope});toast('Memory saved.')}else toast('Already remembered.');});
  requestAnimationFrame(()=>{if(state.active!==deckId||!body.clientHeight)return;body.scrollTop=followLatest?body.scrollHeight:previousTop;chatRenderedDeck=deckId;});
+}
+async function recommendationAction(button){
+ const tray=button.closest('[data-rec-message]'),item=button.closest('[data-rec-id]');
+ const m=deck().chat.find(m=>m.id===tray.dataset.recMessage),rec=m?.recommendations.find(r=>r.id===item.dataset.recId);
+ if(!rec)return;
+ const c=rec.card,action=button.dataset.recAction;
+ const p=[...deck().proposals].reverse().find(p=>norm(p.add)===norm(c.name)&&p.status==='pending');
+ if(action==='inspect'){
+  const shown=button.dataset.recSide==='cut'?deck().cards.find(x=>norm(x.name)===norm(p?.cut||'')):c;
+  if(shown)modal(shown.name,cardPreview(shown));return;
+ }
+ if(busy){toast('Wait for the current reply to finish.');return}
+ if(action==='find'||action==='different'){
+  if($('#message').value.trim()||pendingCard||pendingImage){toast('Send or clear your current draft first.');return}
+  const request=`Find one concrete swap to add ${c.name} to my current mainboard. Keep ${c.name} as the addition. ${action==='different'&&p?`Suggest a different cut from ${p.cut}; I have not accepted that swap.`:'Compare my current cards and suggest the best cut.'} Explain the tradeoff and return a structured swap proposal.`;
+  $('#message').value=request;await sendChat();return;
+ }
+ await run(async()=>{
+  button.disabled=true;
+  if(action==='accept'&&p){await mutate('proposal',{id:p.id,action:'accept'});toast('Swap accepted. You can undo it from the deck toolbar.');}
+  else if(action==='pass'){await mutate('recommendation',{message:m.id,id:rec.id,action:'pass'});toast('Passed. Decision saved to the conversation.');}
+  else if(['main','maybe'].includes(action)){
+   if(deck().cards.some(x=>norm(x.name)===norm(c.name)&&x.zone===action)){toast('Already on this board.');return}
+   await mutate('card',{action:'add',card:c,zone:action});toast('Added to '+(action==='main'?'Mainboard':'Considering')+'.');
+  }
+ });
 }
 function available(name,excludeActive=false){const owned=state.collection.filter(c=>norm(c.name)===norm(name)).reduce((n,c)=>n+c.qty,0),assigned=state.decks.filter(d=>!excludeActive||d.id!==state.active).flatMap(d=>d.cards).filter(c=>['main','commander'].includes(c.zone)&&norm(c.name)===norm(name)).reduce((n,c)=>n+c.qty,0);return {owned,assigned,free:Math.max(0,owned-assigned)}}
 function renderProposals(){const list=deck().proposals.filter(p=>p.status==='pending');$('#proposals').innerHTML=list.map(p=>{const a=available(p.add,true);return `<article class="proposal-card"><div class="proposal-tag">PROPOSED SWAP</div><div class="swap-line"><span>＋</span>${esc(p.add)}</div><div class="swap-line cut"><span>−</span>${esc(p.cut)}</div><p>${esc(p.reason)}</p><div class="availability">${state.collection.length?`${a.owned} owned · ${a.free} available outside other decks`:'Ownership unknown · import your collection'}</div><div class="proposal-actions"><button data-accept="${p.id}" class="button primary">Accept swap ↗</button><button data-reject="${p.id}" class="button secondary">Skip</button></div></article>`}).join('')||'<div class="empty">No pending swaps. Ask Forage for a recommendation.</div>';

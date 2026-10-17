@@ -16,6 +16,20 @@ REQUEST_LOCK=threading.RLock()
 TOKEN=secrets.token_urlsafe(32)
 LOCK=threading.RLock(); API_LOCK=threading.Lock(); LAST_CALL=0
 
+def visual_recommendations(state,deck,result):
+    """UI metadata comes from the local catalog, never model-provided artwork."""
+    if (result.get('_context_trace') or {}).get('recommendation_checks',{}).get('status')=='rejected':return []
+    known=catalog(state,deck);rows=[];seen=set()
+    for item in result.get('recommendations',[])+result.get('proposals',[]):
+        if not isinstance(item,dict):continue
+        name=item.get('name',item.get('add',''))
+        if not isinstance(name,str):continue
+        k=key(name);card=known.get(k)
+        if not card or k in seen:continue
+        seen.add(k)
+        rows.append({'id':uid(),'card':copy.deepcopy(card),'reason':str(item.get('reason',''))[:2000],'status':'pending'})
+    return rows
+
 def db():
     DATA.mkdir(parents=True,exist_ok=True)
     con=sqlite3.connect(DATA/'forage.sqlite3',timeout=30)
@@ -552,7 +566,7 @@ class Handler(BaseHTTPRequestHandler):
                     state=read_state(); deck=deck_of(state,payload['deck'])
                     deck['chat'].append({'id':uid(),'role':'user','text':text})
                     suggestions=[{'id':uid(),'text':str(m['text'])[:1000],'scope':'global' if m.get('scope')=='global' else 'deck'} for m in result.get('memory_suggestions',[])[:4] if isinstance(m,dict) and m.get('text')]
-                    assistant={'id':uid(),'role':'assistant','text':result['reply'],'memory_suggestions':suggestions,'context_trace':result.get('_context_trace')}
+                    assistant={'id':uid(),'role':'assistant','text':result['reply'],'memory_suggestions':suggestions,'context_trace':result.get('_context_trace'),'recommendations':visual_recommendations(state,deck,result)}
                     changes=result.get('category_changes',[]);workspace_changes=result.get('workspace_changes',[])
                     if changes or workspace_changes:
                         try:
@@ -563,7 +577,10 @@ class Handler(BaseHTTPRequestHandler):
                         except ValueError as exc:assistant['text']+='\n\nCategory plan was not created: '+str(exc)+' No categories were changed.'
                     deck['chat'].append(assistant)
                     for p in result.get('proposals',[])[:3]:
-                        if isinstance(p,dict) and all(isinstance(p.get(k),str) and p[k].strip() for k in ['add','cut','reason']): deck['proposals'].append({'id':uid(),'add':p['add'],'cut':p['cut'],'reason':p['reason'],'status':'pending'})
+                        if isinstance(p,dict) and all(isinstance(p.get(k),str) and p[k].strip() for k in ['add','cut','reason']):
+                            for prior in deck['proposals']:
+                                if prior['status']=='pending' and key(prior['add'])==key(p['add']):prior['status']='superseded'
+                            deck['proposals'].append({'id':uid(),'add':p['add'],'cut':p['cut'],'reason':p['reason'],'status':'pending'})
                     write_state(state)
                 return self.send_json({'ok':True})
             resolved=None
@@ -647,6 +664,15 @@ class Handler(BaseHTTPRequestHandler):
                         fields={'text':txt,'scope':scope,'deck':deck['id'] if scope=='deck' else None}
                         if m:m.update(fields)
                         else:state['memories'].append({'id':uid(),**fields})
+                elif path=='/api/recommendation':
+                    message=next((m for m in deck['chat'] if m['id']==payload.get('message')),None)
+                    rec=next((r for r in (message or {}).get('recommendations',[]) if r['id']==payload.get('id')),None)
+                    if not rec:raise ValueError('Recommendation not found.')
+                    if payload.get('action')!='pass':raise ValueError('Unknown recommendation action.')
+                    rec['status']='passed'
+                    for p in deck['proposals']:
+                        if key(p['add'])==key(rec['card']['name']) and p['status']=='pending':p['status']='rejected';p['feedback']='Passed on this addition.'
+                    deck['chat'].append({'id':uid(),'role':'user','text':'I passed on the recommendation to add '+rec['card']['name']+'.'})
                 elif path=='/api/proposal':
                     p=next((p for p in deck['proposals'] if p['id']==payload['id']),None)
                     if not p or p['status']!='pending':raise ValueError('This proposal is no longer pending.')

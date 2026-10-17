@@ -126,6 +126,25 @@ class HttpTests(unittest.TestCase):
             with self.request('/api/chat',{'deck':ident,'message':'What next?'}) as r:self.assertTrue(json.load(r)['ok'])
         after=server.read_state();d=core.deck_of(after,ident) if hasattr(core,'deck_of') else server.deck_of(after,ident)
         self.assertEqual(d['cards'],before);self.assertTrue(any(p['add']=='Test Add' for p in d['proposals']));self.assertFalse(any(m['text']=='Low curve' for m in after['memories']))
+    def test_visual_recommendation_and_pass_preserve_board(self):
+        state=server.read_state();d=server.deck_of(state,state['active']);before=copy.deepcopy(d['cards'])
+        candidate=dict(core.make_entry('Visual Candidate',1),image='https://cards.scryfall.io/normal/front/a/test.jpg',mv=2)
+        state['collection'].append(candidate);server.write_state(state)
+        fake={'reply':'Consider Visual Candidate.','recommendations':[{'name':candidate['name'],'reason':'Low setup','image':'https://evil.example/model.jpg'}],
+              'proposals':[{'add':candidate['name'],'cut':'Forest','reason':'A swap'}]}
+        with patch.object(server,'ai_chat',return_value=fake):
+            with self.request('/api/chat',{'deck':d['id'],'message':'Suggest a card'}) as response:json.load(response)
+        d=server.deck_of(server.read_state(),d['id']);m=d['chat'][-1];rec=m['recommendations'][0]
+        self.assertEqual(len(m['recommendations']),1);self.assertEqual(rec['card']['image'],candidate['image'])
+        self.assertEqual(d['cards'],before)
+        with self.request('/api/recommendation',{'deck':d['id'],'message':m['id'],'id':rec['id'],'action':'pass'}) as response:json.load(response)
+        d=server.deck_of(server.read_state(),d['id'])
+        self.assertEqual(d['cards'],before);self.assertEqual(d['chat'][-2]['recommendations'][0]['status'],'passed')
+        self.assertIn('passed',d['chat'][-1]['text']);self.assertEqual(d['proposals'][-1]['status'],'rejected')
+    def test_unchecked_fallback_is_not_visual_recommendation(self):
+        state=server.read_state();d=server.deck_of(state,state['active']);c=d['cards'][0]
+        self.assertEqual(server.visual_recommendations(state,d,{'reply':'A match','_context_trace':None}),[])
+        self.assertEqual(server.visual_recommendations(state,d,{'recommendations':[{'name':c['name']}],'_context_trace':{'recommendation_checks':{'status':'rejected'}}}),[])
     def test_collection_only_blocks_unowned(self):
         s=server.read_state();d=server.deck_of(s,s['active']);p=d['proposals'][0]
         with patch.object(server,'lookup',return_value=core.make_entry(p['add'],1)):

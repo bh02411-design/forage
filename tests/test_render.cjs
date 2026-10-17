@@ -30,3 +30,21 @@ context.state.active='deck-c';body.clientHeight=0;body.scrollTop=0;context.rende
 body.clientHeight=300;context.renderChat();flush();assert.equal(body.scrollTop,1400);
 context.state.active='deck-d';body.scrollTop=10;context.renderChat();context.state.active='deck-e';flush();assert.equal(body.scrollTop,10); // Ignore stale deck callbacks.
 console.log('8 chat-scroll regression checks passed.');
+
+// Run actual decision handlers: generating an alternative must not mutate the deck.
+(async()=>{
+ const candidate={name:'Candidate',id:'c'},proposal={id:'p',add:'Candidate',cut:'Old Card',status:'pending'};
+ const rec={id:'r',card:candidate,status:'pending'},message={id:'m',recommendations:[rec]};
+ const d={chat:[message],proposals:[proposal],cards:[{name:'Old Card',zone:'main'}]},draft={value:''},calls=[];
+ const ctx={deck:()=>d,norm:s=>s.toLowerCase(),busy:false,pendingCard:null,pendingImage:null,$:()=>draft,
+  toast:()=>{},sendChat:async()=>calls.push(['chat',draft.value]),run:async fn=>fn(),mutate:async(...args)=>calls.push(args)};
+ vm.createContext(ctx);vm.runInContext(app.slice(app.indexOf('async function recommendationAction('),app.indexOf('function available(')),ctx);
+ const button=action=>({dataset:{recAction:action},closest:s=>({dataset:s==='[data-rec-message]'?{recMessage:'m'}:{recId:'r'}})});
+ await ctx.recommendationAction(button('different'));
+ assert.equal(calls.length,1);assert.equal(calls[0][0],'chat');assert.match(calls[0][1],/different cut from Old Card/);
+ assert.match(calls[0][1],/Keep Candidate as the addition/);
+ await ctx.recommendationAction(button('accept'));assert.equal(calls[1][0],'proposal');assert.equal(calls[1][1].action,'accept');
+ await ctx.recommendationAction(button('pass'));assert.equal(calls[2][0],'recommendation');assert.equal(calls[2][1].action,'pass');
+ await ctx.recommendationAction(button('maybe'));assert.equal(calls[3][0],'card');assert.equal(calls[3][1].zone,'maybe');
+ console.log('8 graphical decision-action checks passed.');
+})().catch(error=>{console.error(error);process.exitCode=1});

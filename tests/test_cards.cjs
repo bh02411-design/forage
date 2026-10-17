@@ -37,3 +37,16 @@ assert.equal(JSON.stringify(pinCards),pinBefore);
 assert.equal(groups([]).length,0);
 assert.equal(groups(pinCards.filter(c=>c.zone==='main'),'category')[0][0],'A category');
 console.log('28 commander-placement checks passed.');
+
+const {recommendation}=require('../static/card-view.js');
+const rec={id:'rec',card:{id:'candidate',name:'New <Card>',mv:2,mana_cost:'{1}{B}',image:'https://cards.scryfall.io/normal/front/a/test.jpg'},reason:'Benefit <script>',status:'pending'};
+const proposed=[{id:'p',add:rec.card.name,cut:'Greater Good',reason:'Tradeoff',status:'pending'}];
+const graphic=recommendation(rec,[],cards,proposed);
+assert.match(graphic,/data-rec-action="accept"/);assert.match(graphic,/data-rec-action="different"/);
+assert.match(graphic,/data-rec-side="cut"/);assert.match(graphic,/Greater Good/);
+assert.match(graphic,/cards.scryfall.io/);assert.ok(!graphic.includes('New <Card>'));
+const noSwap=recommendation(rec);assert.match(noSwap,/data-rec-action="find"/);assert.match(noSwap,/data-rec-action="main"/);
+assert.ok(!recommendation({...rec,status:'passed'},[],cards,proposed).includes('data-rec-action="accept"'));
+assert.match(recommendation(rec,[],[{...rec.card,zone:'main'}],proposed),/In mainboard/);
+assert.ok(!recommendation({...rec,card:{...rec.card,image:'javascript:alert(1)'}}).includes('javascript:'));
+console.log('11 graphical recommendation checks passed.');

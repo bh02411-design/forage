@@ -57,3 +57,7 @@ python build_release.py --output dist/Forage-update.zip
 Increase the stable version in `version.json` before a release. Pushing that version change to `main` automatically tests and publishes the update. You can also push a matching `vMAJOR.MINOR.PATCH` tag or use **Actions → Test and publish Forage release → Run workflow**. The workflow tests, builds and publishes `Forage-update.zip` using the repository's built-in token. The updater requires GitHub to supply a SHA-256 digest for the release asset. Application releases contain code only.
 
 Lifecycle tests cover installation, restart, manual rollback, failed-server recovery, archive rejection, and preservation of live data. Supervisor process tests run in Linux CI; Windows launch and live GitHub downloads also need environment-specific verification.
+
+### Visual recommendations
+
+New checked AI additions appear as card graphics beneath the reply. Inspect a card by clicking its artwork. Use **Find a swap** to ask for a cut, **Accept swap** to apply it, **Different cut** to keep the addition and request an alternative, or **Pass** to record your decision. You can also add an unswapped suggestion to Mainboard or save it to Considering. Proposed additions and cuts appear side by side; nothing is changed until you choose an action. Accepted swaps support Undo. Artwork uses resolved local card data and does not consume model context. Unresolved artwork shows a named placeholder; unranked search fallbacks are not presented as recommendations.
