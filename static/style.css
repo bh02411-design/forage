@@ -15,7 +15,7 @@
 
 /* Visual deck browser: category stacks, full-card grids, and compact lists. */
 :root{--card-width:175px}
-.deck-panel{min-width:0}.workspace{align-items:start}
+.deck-panel{min-width:0}.workspace{align-items:start;column-gap:40px;row-gap:24px}
 .view-tools{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:0 18px 16px;border-bottom:1px solid var(--line)}
 .segmented{display:inline-flex;border:1px solid #364333;border-radius:6px;overflow:hidden;background:#0b110c;flex-shrink:0}
 .segmented button{background:transparent;border:0;color:var(--muted);padding:8px 11px;font-size:11px}
@@ -40,19 +40,21 @@
 .tile-caption{display:flex;flex-direction:column;padding:9px 10px;gap:4px;width:100%;min-height:49px;background:#131c14}
 .tile-caption strong{font-size:11px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tile-caption small{font-size:9px;color:var(--muted)}
-.tile-quantity,.tile-protected{position:absolute;top:7px;background:#0a110cee;border:1px solid #6e8659;color:#e1f0d5;border-radius:4px;padding:3px 5px;font-size:10px;font-weight:650}
-.tile-quantity{right:7px}.tile-protected{left:7px;color:var(--amber);border-color:#8e7444}
+.tile-badges{position:absolute;top:7px;left:7px;display:flex;align-items:flex-start;gap:4px;pointer-events:none}
+.tile-quantity,.tile-protected{background:#0a110cee;border:1px solid #6e8659;color:#e1f0d5;border-radius:4px;padding:3px 5px;font-size:10px;font-weight:650}
+.tile-protected{color:var(--amber);border-color:#8e7444}
 .art-placeholder{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:17px;gap:12px;text-align:center;border:7px solid #0b100c}
 .placeholder-symbol{font-size:36px;color:#9ab781}.art-placeholder strong{font-size:13px;line-height:1.6;font-weight:500}.art-placeholder small{font-size:10px;line-height:1.7;color:var(--muted)}
 .image-failed .art-frame:after{content:'Image unavailable · click for card details';position:absolute;inset:0;display:grid;place-content:center;padding:15px;text-align:center;font-size:11px;color:var(--muted);background:#152017}
 .mode-stacks .card-visual:not(:last-child){height:34px;border-radius:8px 8px 0 0;border-bottom:0}
 .mode-stacks .card-visual:last-child{border-radius:8px}
 .mode-stacks .tile-caption{display:none}
-.mode-stacks .no-art:not(:last-child) .art-placeholder{justify-content:flex-start;align-items:flex-start;text-align:left;padding:5px 38px 0 10px;border-width:3px}
+.mode-stacks .no-art:not(:last-child) .art-placeholder{justify-content:flex-start;align-items:flex-start;text-align:left;padding:5px 10px 0 42px;border-width:3px}
 .mode-stacks .no-art:not(:last-child) .art-placeholder strong{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
 .mode-stacks .no-art:not(:last-child) .placeholder-symbol,.mode-stacks .no-art:not(:last-child) .art-placeholder small{display:none}
-.mode-stacks .tile-quantity,.mode-stacks .tile-protected{top:4px;font-size:9px;padding:2px 4px}
-.mode-stacks .tile-protected{left:auto;right:37px}
+.mode-stacks .tile-badges{top:4px}
+.mode-stacks .tile-quantity,.mode-stacks .tile-protected{font-size:9px;padding:2px 4px}
+
 .mode-grid{display:block}.mode-grid .visual-group{margin-bottom:14px}
 .mode-grid .group-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(var(--card-width),100%),1fr));gap:14px}
 .mode-grid .card-visual{max-width:calc(var(--card-width) * 1.25)}

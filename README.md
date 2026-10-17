@@ -54,6 +54,6 @@ node tests/test_render.cjs
 python build_release.py --output dist/Forage-update.zip
 ```
 
-Increase the stable version in `version.json` before a release. Push a matching `vMAJOR.MINOR.PATCH` tag or use **Actions → Test and publish Forage release → Run workflow**. The workflow tests, builds and publishes `Forage-update.zip` using the repository's built-in token. The updater requires GitHub to supply a SHA-256 digest for the release asset. Application releases contain code only.
+Increase the stable version in `version.json` before a release. Pushing that version change to `main` automatically tests and publishes the update. You can also push a matching `vMAJOR.MINOR.PATCH` tag or use **Actions → Test and publish Forage release → Run workflow**. The workflow tests, builds and publishes `Forage-update.zip` using the repository's built-in token. The updater requires GitHub to supply a SHA-256 digest for the release asset. Application releases contain code only.
 
 Lifecycle tests cover installation, restart, manual rollback, failed-server recovery, archive rejection, and preservation of live data. Supervisor process tests run in Linux CI; Windows launch and live GitHub downloads also need environment-specific verification.
