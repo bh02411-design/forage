@@ -11,3 +11,22 @@ assert.ok(!render('{bad json').includes('{bad json'));
 console.log('8 chat-rendering checks passed.');
 assert.ok(!render('<|tool_call>call:collection_search{query:draw}<tool_call|>').includes('<|tool_call>'));
 console.log('Saved tool-request display check passed.');
+
+// Exercise the actual chat renderer against scroll metrics, not a separate model.
+const vm=require('node:vm'),fs=require('node:fs');
+const app=fs.readFileSync(require.resolve('../static/app.js'),'utf8');
+const chatCode=app.slice(app.indexOf('function renderChat('),app.indexOf('function available('));
+const body={scrollTop:0,scrollHeight:1000,clientHeight:300},elements={'#conversation-body':body,'#welcome':{},'#messages':{}};
+const frames=[];
+const context={state:{active:'deck-a',memories:[]},chatRenderedDeck:null,deck:()=>({chat:[]}),$:s=>elements[s],$$:()=>[],requestAnimationFrame:cb=>frames.push(cb)};
+vm.createContext(context);vm.runInContext(chatCode,context);
+const flush=()=>{while(frames.length)frames.shift()()};
+context.renderChat();flush();assert.equal(body.scrollTop,1000); // First opening.
+body.scrollTop=150;context.renderChat();flush();assert.equal(body.scrollTop,150); // Reading older replies.
+body.scrollTop=690;context.renderChat();body.scrollHeight=1400;flush();assert.equal(body.scrollTop,1400); // Follow a new reply at bottom.
+body.scrollTop=0;context.state.active='deck-b';context.renderChat();flush();assert.equal(body.scrollTop,1400); // Deck switch.
+body.scrollTop=0;context.renderChat(true);flush();assert.equal(body.scrollTop,1400); // Reopen conversation.
+context.state.active='deck-c';body.clientHeight=0;body.scrollTop=0;context.renderChat();flush();assert.equal(context.chatRenderedDeck,'deck-b'); // Hidden panels do not consume first-open scroll.
+body.clientHeight=300;context.renderChat();flush();assert.equal(body.scrollTop,1400);
+context.state.active='deck-d';body.scrollTop=10;context.renderChat();context.state.active='deck-e';flush();assert.equal(body.scrollTop,10); // Ignore stale deck callbacks.
+console.log('8 chat-scroll regression checks passed.');
