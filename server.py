@@ -8,6 +8,7 @@ from seed import initial_state
 import updater
 import launcher
 from advisor import FACT_FIELDS, ABILITIES, intents, catalog, commander_colors, evidence, GUIDANCE, check_recommendations, wants_draw_advice, preference_suggestion, card_facts, mana_value_filter, search_prompt
+SEARCH_FIELDS=['colors','keywords','set','rarity','layout','search_metadata_version']
 ROOT=Path(__file__).resolve().parent
 DATA=Path(os.environ.get('FORAGE_DATA_DIR',str(ROOT/'data')))
 INSTANCE_ID=secrets.token_hex(12)
@@ -23,7 +24,7 @@ def categorize_board_card(state,deck,card,known=None):
     if not card.get('type_line') and source.get('type_line'):
         for field in ['land','mdfc']:
             if field in source:card[field]=source[field]
-    for field in FACT_FIELDS+['image','land','mdfc','roles']:
+    for field in FACT_FIELDS+['image','land','mdfc','roles']+SEARCH_FIELDS:
         if card.get(field) in [None,'',[]] and source.get(field) is not None:card[field]=copy.deepcopy(source[field])
     return auto_categorize_card(deck,card)
 
@@ -111,6 +112,9 @@ def card_data(raw):
     land='Land' in front.get('type_line','')
     mdfc=raw.get('layout')=='modal_dfc' and any('Land' in f.get('type_line','') for f in faces)
     entry.update({'mv':raw.get('cmc'),'mana_cost':front.get('mana_cost',''),'type_line':typ,'oracle_text':text,'land':land,'mdfc':mdfc,'color_identity':raw.get('color_identity',[]),'image':(raw.get('image_uris') or front.get('image_uris') or {}).get('normal',''),'scryfall_uri':raw.get('scryfall_uri',''),'scryfall_id':raw['id'],'meta_source':'Scryfall lookup '+datetime.date.today().isoformat(),'legalities':raw.get('legalities',{}),'game_changer':raw.get('game_changer',False),'power':front.get('power'),'toughness':front.get('toughness')})
+    colors=raw.get('colors')
+    if colors is None and faces and all(isinstance(f.get('colors'),list) for f in faces):colors=sorted(set(x for f in faces for x in f['colors']))
+    entry.update({'colors':colors,'keywords':raw.get('keywords'),'set':raw.get('set'),'rarity':raw.get('rarity'),'layout':raw.get('layout'),'search_metadata_version':1})
     roles=[]
     if land: roles.append('Land'); entry['group']='Land'
     if re.search(r'\bdraw\b',text,re.I): roles.append('Draw: text match / review')
@@ -128,7 +132,7 @@ def lookup(name):
         row=c.execute('SELECT payload FROM cache WHERE name=?',(key(name),)).fetchone()
     if row:
         cached=json.loads(row[0])
-        if 'power' in cached:return cached
+        if 'power' in cached and cached.get('search_metadata_version')==1:return cached
     raw=scry('/cards/named?'+urllib.parse.urlencode({'fuzzy':name}))
     card=card_data(raw)
     with db() as c:
@@ -658,7 +662,7 @@ class Handler(BaseHTTPRequestHandler):
                         for c in cards:
                             if key(c['name']) in prior:
                                 old=prior[key(c['name'])]
-                                for field in ['mv','roles','protected','land','mdfc','oracle_text','type_line','image','color_identity','mana_cost','meta_source','scryfall_uri','scryfall_id','power','toughness','legalities']:
+                                for field in ['mv','roles','protected','land','mdfc','oracle_text','type_line','image','color_identity','mana_cost','meta_source','scryfall_uri','scryfall_id','power','toughness','legalities']+SEARCH_FIELDS:
                                     if field in old:c[field]=old[field]
                         known=catalog(state,deck)
                         for card in cards:categorize_board_card(state,deck,card,known)
@@ -712,7 +716,7 @@ class Handler(BaseHTTPRequestHandler):
                     elif action=='enrich':
                         new=payload['card']
                         if key(c['name'])!=key(new['name']):raise ValueError('Card name mismatch; confirm the recognized name first.')
-                        for k in ['mv','mana_cost','type_line','oracle_text','image','color_identity','scryfall_uri','scryfall_id','meta_source','game_changer','land','mdfc','power','toughness','legalities']: 
+                        for k in ['mv','mana_cost','type_line','oracle_text','image','color_identity','scryfall_uri','scryfall_id','meta_source','game_changer','land','mdfc','power','toughness','legalities']+SEARCH_FIELDS: 
                             if k in new:c[k]=new[k]
                         if not c.get('roles'):c['roles']=new.get('roles',[])
                         categorize_board_card(state,deck,c)

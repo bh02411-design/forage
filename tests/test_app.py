@@ -17,6 +17,13 @@ class CoreTests(unittest.TestCase):
         deck={'cards':[c],'name':'Test','history':[]}
         core.apply_workspace_plan(deck,[],[{'action':'set_card','card':'Candidate','fields':{'zone':'maybe'}}])
         self.assertEqual(deck['cards'][0]['group'],'Draw')
+    def test_search_metadata_keeps_colors_distinct_from_identity_and_out_of_prompt(self):
+        c=server.card_data({'id':'filter-fixture','name':'Filter Fixture','cmc':2,'type_line':'Creature','colors':['W'],'color_identity':['W','B'],'power':'2','toughness':'2','keywords':['Flying'],'set':'blb','rarity':'rare','layout':'normal'})
+        self.assertEqual(c['colors'],['W']);self.assertEqual(c['color_identity'],['W','B']);self.assertEqual(c['keywords'],['Flying']);self.assertEqual(c['set'],'blb')
+        facts=server.card_facts(c);self.assertNotIn('colors',facts);self.assertNotIn('keywords',facts);self.assertNotIn('set',facts)
+    def test_double_face_filter_colors_use_faces_not_identity(self):
+        c=server.card_data({'id':'face-filter','name':'Front // Back','cmc':2,'color_identity':['W','U','B'],'layout':'modal_dfc','card_faces':[{'colors':['W'],'type_line':'Creature'},{'colors':['U'],'type_line':'Creature'}]})
+        self.assertEqual(c['colors'],['U','W']);self.assertEqual(c['color_identity'],['W','U','B'])
     def test_snapshot_counts(self):
         r=core.analysis(self.deck)
         self.assertEqual(r['total'],100);self.assertEqual(r['lands'],37);self.assertEqual(r['mdfc'],1);self.assertEqual(r['average'],2.11)
@@ -247,6 +254,13 @@ class HttpTests(unittest.TestCase):
         state=server.read_state();d=server.deck_of(state,state['active']);d['cards']=[];before=copy.deepcopy(d['history']);server.write_state(state)
         with self.request('/api/auto-categorize',{'deck':d['id'],'zone':'main'}) as response:self.assertFalse(json.load(response)['undo_available'])
         self.assertEqual(server.deck_of(server.read_state(),d['id'])['history'],before)
+    def test_old_cache_refreshes_once_for_filter_metadata(self):
+        old=dict(core.make_entry('Filter Cache Candidate',1),power='2',scryfall_id='old-cache')
+        with server.db() as con:con.execute('INSERT OR REPLACE INTO cache VALUES (?,?)',(core.key(old['name']),json.dumps(old)))
+        raw={'id':'new-cache','name':old['name'],'cmc':2,'power':'2','toughness':'2','colors':['B'],'color_identity':['B','G'],'keywords':[],'set':'blb','rarity':'common','layout':'normal','type_line':'Creature'}
+        with patch.object(server,'scry',return_value=raw) as fetch:
+            refreshed=server.lookup(old['name']);again=server.lookup(old['name'])
+        self.assertEqual(fetch.call_count,1);self.assertEqual(refreshed['colors'],['B']);self.assertEqual(again['set'],'blb')
     def test_collection_only_blocks_unowned(self):
         s=server.read_state();d=server.deck_of(s,s['active']);p=d['proposals'][0]
         with patch.object(server,'lookup',return_value=core.make_entry(p['add'],1)):

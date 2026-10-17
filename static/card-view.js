@@ -40,5 +40,70 @@ function pendingDecisions(deck){
  const shown=new Set(recommendations.map(({rec})=>norm(rec.card.name)));
  return {recommendations,proposals:proposals.filter(p=>!shown.has(norm(p.add))),plans:(deck.category_plans||[]).filter(p=>p.status==='pending')};
 }
-const api={groups,art,tile,groupName,recommendation,pendingDecisions};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.ForageCards=api;
+// Local Scryfall-style subset. Unknown metadata is not equivalent to a negative match.
+function compileSearch(query){
+ query=String(query||'').trim();if(query.length>2000)throw Error('Keep filters under 2,000 characters.');
+ const tokens=[];let token='',quote='',escaped=false;
+ const emit=()=>{if(token){tokens.push(token);token=''}};
+ for(const ch of query){if(quote){token+=ch;if(escaped)escaped=false;else if(ch==='\\')escaped=true;else if(ch===quote)quote='';continue}if(ch==='"'||(ch==="'"&&(!token||/[:=!<>]$/.test(token)))){quote=ch;token+=ch}else if(/\s/.test(ch))emit();else if(ch==='('||ch===')'){emit();tokens.push(ch)}else token+=ch}
+ emit();if(quote)throw Error('Close the quoted phrase.');if(tokens.length>150)throw Error('Use fewer than 150 search terms.');
+ const value=s=>{if(!s)throw Error('Add a value after the operator.');if((s[0]==='"'||s[0]==="'")&&s.at(-1)===s[0])return s.slice(1,-1).replace(/\\(["'\\])/g,'$1');return s};
+ const contains=(actual,needle)=>actual==null?null:String(actual).toLowerCase().includes(needle.toLowerCase());
+ const number=(x,op,y)=>{if(x==null||!/^[-+]?\d+(?:\.\d+)?$/.test(String(x)))return null;x=Number(x);return op==='<'?x<y:op==='<='?x<=y:op==='>'?x>y:op==='>='?x>=y:op==='!='?x!==y:x===y};
+ const and=(a,b)=>a===false||b===false?false:a===null||b===null?null:true;
+ const or=(a,b)=>a===true||b===true?true:a===null||b===null?null:false;
+ const not=a=>a===null?null:!a;
+ const colorNames={white:'w',blue:'u',black:'b',red:'r',green:'g',colorless:'',c:'',azorius:'wu',dimir:'ub',rakdos:'br',gruul:'rg',selesnya:'gw',orzhov:'wb',izzet:'ur',golgari:'bg',boros:'rw',simic:'gu',esper:'wub',grixis:'ubr',jund:'brg',naya:'rgw',bant:'gwu',abzan:'wbg',jeskai:'urw',sultai:'bgu',mardu:'rwb',temur:'gur',fivecolor:'wubrg'};
+ function term(raw){
+  if(raw.startsWith('-')&&raw.length>1){const child=term(raw.slice(1));return c=>not(child(c))}
+  if(raw.startsWith('!"')||raw.startsWith("!'")){const exact=value(raw.slice(1)).toLowerCase();return c=>String(c.name).toLowerCase()===exact}
+  const m=/^([a-z_]+)(:|!=|<=|>=|=|<|>)(.*)$/i.exec(raw);
+  if(!m){if(/[<>:=]/.test(raw)&&!/^['"]/.test(raw))throw Error('Use a supported field such as o:draw, t:creature or mv<=3.');const text=value(raw);return c=>contains([c.name,c.type_line,c.oracle_text,...(c.roles||[])].filter(x=>x!=null).join(' '),text)}
+  const field=m[1].toLowerCase(),op=m[2],v=value(m[3]);
+  if(v.startsWith('/'))throw Error('Regular-expression searches are not supported locally.');
+  const numeric={mv:'mv',cmc:'mv',manavalue:'mv',pow:'power',power:'power',tou:'toughness',toughness:'toughness',qty:'qty'};
+  if(numeric[field]){if(!/^-?\d+(?:\.\d+)?$/.test(v))throw Error(field+' needs a number, such as '+field+'<=3.');return c=>number(c[numeric[field]],op,Number(v))}
+  if(['c','color','id','identity','ci','commander'].includes(field)){
+   const identity=!['c','color'].includes(field),source=identity?'color_identity':'colors';
+   const multi=['m','multicolor','multicolored'].includes(v.toLowerCase());let wanted=colorNames[v.toLowerCase()]??v.toLowerCase();
+   if(!multi&&!/^\d+$/.test(wanted)&&!/^[wubrg]*$/.test(wanted))throw Error('Use W, U, B, R, G, color names, guild names or a color count.');
+   if(multi&&![':','=','!='].includes(op))throw Error('Use c:m or id:m for multicolor, or compare a numeric color count.');
+   wanted=[...new Set(wanted)];
+   return c=>{if(!Array.isArray(c[source]))return null;const actual=[...new Set(c[source].map(x=>x.toLowerCase()))];
+    if(multi)return op==='!='?actual.length<2:actual.length>=2;
+    if(/^\d+$/.test(v))return number(actual.length,op,Number(v));
+    const a=actual.every(x=>wanted.includes(x)),b=wanted.every(x=>actual.includes(x));
+    const cmp=op===':'?(!wanted.length?'=':identity?'<=':'>='):op;
+    return cmp==='='?a&&b:cmp==='!='?!(a&&b):cmp==='<='?a:cmp==='<'?a&&actual.length<wanted.length:cmp==='>'?b&&actual.length>wanted.length:b;
+   };
+  }
+  const textFields={n:'name',name:'name',o:'oracle_text',oracle:'oracle_text',fo:'oracle_text',fulloracle:'oracle_text',t:'type_line',type:'type_line',role:'roles',group:'group',category:'group',s:'set',set:'set',r:'rarity',rarity:'rarity',kw:'keywords',keyword:'keywords'};
+  if(textFields[field]){
+   if(![':','=','!='].includes(op))throw Error('Use : or = for '+field+'.');
+   let needle=v.toLowerCase();if(['r','rarity'].includes(field)){needle=({c:'common',u:'uncommon',r:'rare',m:'mythic',s:'special',b:'bonus'})[needle]||needle;if(!['common','uncommon','rare','mythic','special','bonus'].includes(needle))throw Error('Unknown rarity. Try r:common or r:mythic.')}
+   return c=>{let actual=c[textFields[field]];if(actual==null||(actual===''&&['type_line','set','rarity'].includes(textFields[field])))return null;
+    if(Array.isArray(actual))actual=actual.join(' ');
+    if(['o','oracle'].includes(field)){let depth=0,plain='';for(const ch of String(actual)){if(ch==='(')depth++;else if(ch===')')depth=Math.max(0,depth-1);else if(!depth)plain+=ch}actual=plain}
+    let result=['set','s','rarity','r','kw','keyword'].includes(field)?(Array.isArray(c[textFields[field]])?c[textFields[field]].some(x=>String(x).toLowerCase()===needle):String(actual).toLowerCase()===needle):op===':'?contains(actual,needle):String(actual).toLowerCase()===needle;
+    return op==='!='?!result:result;
+   };
+  }
+  if(['f','format','legal','banned','restricted'].includes(field)){
+   if(op!==':')throw Error('Use '+field+':commander for format filters.');const format=v.toLowerCase()==='edh'?'commander':v.toLowerCase();
+   return c=>{const status=c.legalities?.[format];if(status==null)return null;return field==='banned'?status==='banned':field==='restricted'?status==='restricted':['legal','restricted'].includes(status)};
+  }
+  if(field==='is'){
+   if(op!==':')throw Error('Use is:permanent, is:dfc or is:mdfc.');const kind=v.toLowerCase();if(!['permanent','spell','dfc','mdfc','modal_dfc'].includes(kind))throw Error('This is: filter is not supported locally.');
+   return c=>{if(['dfc','mdfc','modal_dfc'].includes(kind)){if(c.layout==null)return null;return kind==='dfc'?['transform','modal_dfc','reversible_card','double_faced_token'].includes(c.layout):c.layout==='modal_dfc'}if(c.type_line==null)return null;return kind==='spell'?!/\bLand\b/.test(c.type_line):/\b(Creature|Artifact|Enchantment|Planeswalker|Battle|Land)\b/.test(c.type_line)};
+  }
+  throw Error('Unsupported local filter: '+field+'. See the Syntax key for supported fields.');
+ }
+ let pos=0;
+ function unary(){if(['-','NOT'].includes(tokens[pos]?.toUpperCase())){pos++;const f=unary();return c=>not(f(c))}if(tokens[pos]==='('){pos++;const f=expr();if(tokens[pos++]!==')')throw Error('Close the search parentheses.');return f}if(!tokens[pos]||[')', 'OR','AND'].includes(tokens[pos].toUpperCase()))throw Error('Add a term beside the search operator.');return term(tokens[pos++])}
+ function both(){let f=unary();while(pos<tokens.length&&tokens[pos]!==')'&&tokens[pos].toUpperCase()!=='OR'){if(tokens[pos].toUpperCase()==='AND')pos++;const g=unary(),previous=f;f=c=>and(previous(c),g(c))}return f}
+ function expr(){let f=both();while(tokens[pos]?.toUpperCase()==='OR'){pos++;const g=both(),previous=f;f=c=>or(previous(c),g(c))}return f}
+ if(!tokens.length)return ()=>true;const filter=expr();if(pos!==tokens.length)throw Error('Check the search parentheses.');return filter;
+}
+function search(cards,query){try{const test=compileSearch(query),matches=[];let unknown=0;for(const c of cards){const result=test(c);if(result===true)matches.push(c);else if(result===null)unknown++}return {matches,unknown,error:null}}catch(error){return {matches:[],unknown:0,error:error.message}}}
+const api={groups,art,tile,groupName,recommendation,pendingDecisions,search,compileSearch};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.ForageCards=api;
 })(typeof window!=='undefined'?window:globalThis);

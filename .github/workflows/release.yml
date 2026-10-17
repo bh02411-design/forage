@@ -33,6 +33,7 @@ jobs:
       - run: python -m unittest discover -s tests -p 'test*.py'
       - run: node --check static/app.js
       - run: node tests/test_cards.cjs
+      - run: node tests/test_search.cjs
       - run: node tests/test_render.cjs
       - run: python build_release.py --output dist/Forage-update.zip
       - name: Write readable release notes

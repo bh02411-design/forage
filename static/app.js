@@ -41,9 +41,22 @@ function render(){
   renderDeck();renderChat();renderProposals();renderMemory();renderCollection();renderHistory();bindWorkspacePlans();
   $('#collection-count').textContent=state.collection.reduce((n,c)=>n+c.qty,0).toLocaleString();$('#memory-count').textContent=state.memories.length;
 }
+function filterStatus(where,result,query,pinned=false){
+ const el=$('#'+where+'-filter-status');el.classList.toggle('filter-error',!!result.error);
+ el.textContent=result.error||[result.unknown?result.unknown+' entries have unresolved search data. Resolve card data to include them.':'',pinned?'Commander remains pinned.':''].filter(Boolean).join(' ');
+ $('#'+where+'-search').setAttribute('aria-invalid',String(!!result.error));
+}
+function syntaxKey(where){
+ const examples=[['o:draw','Rules text contains draw; ignores reminder text.'],['o:"sacrifice a creature"','Match a rules-text phrase.'],['t:creature -t:artifact','Creature cards excluding artifacts.'],['mv<=3','Mana value at most 3; cmc is an alias.'],['t:creature pow<=3','Creatures with numeric power at most 3.'],['tou>=4','Numeric toughness at least 4.'],['id<=bg','Color identity within black/green, including colorless.'],['id=wbr','Exactly white/black/red identity.'],['c:r','Card colors contain red (distinct from identity).'],['c=0','Colorless cards.'],['r:rare','Rarity; also common, uncommon, mythic.'],['s:blb','The stored printing is from BLB.'],['kw:flying','Saved keyword list contains flying.'],['f:commander','Legal in Commander; legal:commander is an alias.'],['is:mdfc','Modal double-faced cards.'],['!"Deadly Dispute"','Exact card name.'],['(o:draw OR o:mill) mv<=3','Group alternatives, then combine with another condition.'],['role:draw','Forage extra: search assigned role labels.'],['group:"Card Draw"','Forage extra: search a category.'],['qty>=2','Forage extra: owned copies / deck-row quantity.']];
+ modal('Filter syntax key',`<p class="modal-note">Forage supports these common Scryfall-style filters locally. Plain words still search names, rules, types and roles. Spaces mean AND; use OR, NOT, a leading minus, quotes and parentheses to refine a search. Use operators without spaces inside a term, such as mv&lt;=3.</p><div class="syntax-table"><table><thead><tr><th>Click to try</th><th>Meaning</th></tr></thead><tbody>${examples.map(([q,note])=>`<tr><td><button class="syntax-example quiet" data-filter-query="${esc(q)}">${esc(q)}</button></td><td>${esc(note)}</td></tr>`).join('')}</tbody></table></div><p class="modal-note">Search uses stored card metadata. Resolve card data for missing fields; unknown values are excluded even under NOT. Set/rarity filters match the stored printing before merging names; a name-only import may resolve to a different edition than your physical copy. The deck’s commander stays pinned.</p><p class="modal-note">This is a supported subset. Prices, Scryfall Tagger tags (otag:), regex and other unlisted fields are unavailable locally. <a href="https://scryfall.com/docs/syntax" target="_blank" rel="noopener noreferrer">Full Scryfall syntax reference ↗</a></p>`);
+ $$('[data-filter-query]').forEach(b=>b.onclick=()=>{const input=$('#'+where+'-search');input.value=b.dataset.filterQuery;closeModal();if(where==='collection'){collectionLimit=60;renderCollection()}else renderDeck();input.focus()});
+}
 function renderDeck(){
  $('#auto-categorize').title='Categorize unassigned cards on '+(zone==='main'?'Mainboard':'Considering');
- const filter=$('#deck-search').value.toLowerCase(),cards=deck().cards.filter(c=>(zone==='main'?['main','commander'].includes(c.zone):c.zone==='maybe')&&(c.zone==='commander'||`${c.name} ${(c.roles||[]).join(' ')} ${c.type_line||''} ${c.oracle_text||''}`.toLowerCase().includes(filter)));
+ const filter=$('#deck-search').value,board=deck().cards.filter(c=>zone==='main'?['main','commander'].includes(c.zone):c.zone==='maybe');
+ const result=ForageCards.search(board,filter),visible=new Set(result.matches.map(c=>c.id));
+ const cards=board.filter(c=>c.zone==='commander'||visible.has(c.id));
+ filterStatus('deck',result,filter,zone==='main'&&board.some(c=>c.zone==='commander'&&!visible.has(c.id)));
  $('#card-count').textContent=cards.reduce((a,c)=>a+c.qty,0)+' cards';
  const entries=ForageCards.groups(cards,groupBy,sortBy);
  if(groupBy==='category'&&zone==='main'&&!filter){for(const name of deck().categories||[])if(!entries.some(([g])=>g===name))entries.push([name,[]]);}
@@ -158,9 +171,10 @@ function renderMemory(){const entries=state.memories.filter(m=>m.scope==='global
  $('#rules').innerHTML=state.rules.map(r=>`<article class="rule-note"><strong>${esc(r.title)}</strong><p>${esc(r.text)}</p><a href="${esc(safeUrl(r.source))}" target="_blank" rel="noopener noreferrer">Reference ↗</a><p class="muted small">${esc(r.status)}</p></article>`).join('');
 }
 function renderCollection(){
- const q=$('#collection-search').value.toLowerCase();$('#collection-source').textContent=state.collection_source;
- const merged=new Map();for(const c of state.collection){const k=norm(c.name);if(!merged.has(k))merged.set(k,{...c});else merged.get(k).qty+=c.qty}
- const matches=[...merged.values()].filter(c=>`${c.name} ${c.type_line||''} ${c.oracle_text||''} ${(c.roles||[]).join(' ')}`.toLowerCase().includes(q)).sort((a,b)=>a.name.localeCompare(b.name));
+ const q=$('#collection-search').value;$('#collection-source').textContent=state.collection_source;
+ const result=ForageCards.search(state.collection,q);filterStatus('collection',result,q);
+ const merged=new Map();for(const c of result.matches){const k=norm(c.name);if(!merged.has(k))merged.set(k,{...c});else merged.get(k).qty+=c.qty}
+ const matches=[...merged.values()].sort((a,b)=>a.name.localeCompare(b.name));
  const cards=matches.slice(0,collectionLimit);
  $('#collection-results').textContent=`${matches.length.toLocaleString()} unique matches · showing ${cards.length}`;
  $('#collection-grid').hidden=collectionMode!=='grid';$('#collection-table-wrap').hidden=collectionMode!=='list';
@@ -207,6 +221,7 @@ $('#modal-close').onclick=closeModal;$('#modal').addEventListener('click',e=>{if
 $$('[data-view]').forEach(b=>b.onclick=()=>changeView(b.dataset.view));
 $('#deck-select').onchange=e=>run(()=>mutate('active',{id:e.target.value}));
 $('#new-deck').onclick=()=>{modal('Start another deck','<label class="field">Deck name<input id="new-name" placeholder="Terra · Reanimator"></label><button id="create-deck" class="button primary">Create deck</button>');$('#create-deck').onclick=()=>run(async()=>{await mutate('new-deck',{name:$('#new-name').value});closeModal();changeView('workbench')})};
+$('#deck-syntax-key').onclick=()=>syntaxKey('deck');$('#collection-syntax-key').onclick=()=>syntaxKey('collection');
 $('#deck-search').oninput=renderDeck;$('#collection-search').oninput=()=>{collectionLimit=60;renderCollection()};
 $$('[data-zone]').forEach(b=>b.onclick=()=>{zone=b.dataset.zone;$$('[data-zone]').forEach(x=>x.classList.toggle('active',x===b));renderDeck()});
 $('#pending-decisions').onclick=showPendingDecisions;

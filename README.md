@@ -74,6 +74,11 @@ History uses published releases from your configured GitHub repository. Cached h
 
 ### Changelog
 
+**0.2.14**
+
+- Add local Scryfall-style filters and clickable syntax keys to deck and collection search.
+- Keep unknown metadata distinct from negative results, and show errors for unsupported fields.
+
 **0.2.13**
 
 - Add the branded green Forage tray icon. Quit and reopen Forage once after updating to load the new icon.
@@ -147,3 +152,9 @@ After updating, open **Local AI & settings → Windows tray & startup**, choose 
 Double-click the tray icon to open the browser. Right-click it for **Open Forage**, **Start with Windows**, or **Quit Forage**. Closing the browser leaves the server running. Sign-in starts the service quietly without opening the browser. Startup uses the current user’s registry Run entry `ForageLocalDeckBuilder`; disabling it from the tray or setup removes only that entry. No administrator privileges or pip packages are required. Windows PowerShell, .NET Windows Forms and Python’s `pythonw.exe` supply the native tray UI.
 
 Logs are written to `data/forage.log` (or your configured data directory); the previous log is retained as `forage.previous.log` when it exceeds 2 MB on launch. Only one tray launcher owns a data directory and port. A small launcher bootstrap and fallback are retained under `data/desktop/` so tray startup remains available when switching to an earlier application version. Update supervision continues in tray mode. Quit waits for active requests before stopping the server; older app releases without the shutdown endpoint are terminated when quitting their tray launcher. Windows tray appearance, startup registration and shortcuts need verification on Windows; automated CI runs on Linux.
+
+### Search syntax
+
+Deck and collection filters support common Scryfall-style syntax: `o:draw`, `o:"sacrifice a creature"`, `t:creature`, `mv<=3` (`cmc` alias), `pow<=3`, `tou>=4`, `id<=bg`, `id=wbr`, `c:r`, `c=0`, `s:blb`, `r:rare`, `kw:flying`, `f:commander`, and `is:mdfc`. Combine terms with spaces/AND, OR and parentheses, and exclude with `-` or NOT. Use `!"Exact Card Name"` for an exact name. `role:`, `group:` and `qty>=2` are Forage extras. Plain words retain Forage’s broad name/rules/type/role matching.
+
+Each search has a **Syntax key** with clickable examples. This is a local subset, not the entire Scryfall query engine: unsupported fields, Tagger tags, regex and price queries produce clear errors. Missing metadata stays unknown even under negation, with a notice to Resolve card data. Scryfall card colors are stored separately from color identity; existing records may need resolving once for the added fields. Printing-level filters run before collection rows merge; name-only imports may use a different Scryfall printing than the physical copy, and commanders stay pinned in deck views. New metadata is kept out of AI prompts.

@@ -117,3 +117,14 @@
 .release-installed{color:var(--green,#c8e7b2);border:1px solid #6d865b;padding:3px 8px;border-radius:20px;font-size:10px}
 .release-entry ul{padding-left:20px}
 #history-updates-back{margin-top:20px}
+
+.filter-status{font-size:11px;line-height:1.5;color:var(--muted);margin:0 16px;overflow-wrap:anywhere}
+.filter-status:not(:empty){padding:7px 0}
+.filter-status.filter-error{color:var(--amber)}
+.collection-search-row{display:flex;align-items:center;gap:12px}.collection-search-row .full-input{min-width:0;flex:1}
+.collection-search-row .button{white-space:nowrap}
+.syntax-table{overflow-x:auto}.syntax-table th,.syntax-table td{padding:9px 8px;font-size:11px}
+.syntax-example{font-family:monospace;text-align:left;white-space:normal;overflow-wrap:anywhere;color:var(--green,#c5e8a5)}
+
+.search-row input{min-width:0;flex:1}
+#deck-syntax-key{white-space:nowrap;flex-shrink:0;font-size:10px}
