@@ -7,6 +7,16 @@ from fixtures import fixture_state
 
 class CoreTests(unittest.TestCase):
     def setUp(self): self.state=fixture_state();self.deck=self.state['decks'][0]
+    def test_considering_defaults_keep_roles_and_type_fallback(self):
+        cases=[({'oracle_text':'Draw two cards. Sacrifice a creature.'},'Draw'),({'land':True},'Land'),({'type_line':'Creature — Squirrel'},'Creature'),({},'Uncategorized')]
+        for facts,expected in cases:
+            c=dict(core.make_entry('Candidate',1,'Considering'),**facts);roles=copy.deepcopy(c['roles'])
+            core.auto_categorize_card({'cards':[c]},c);self.assertEqual(c['group'],expected);self.assertEqual(c['roles'],roles)
+    def test_ai_board_change_uses_same_considering_default(self):
+        c=dict(core.make_entry('Candidate',1),oracle_text='Draw two cards.')
+        deck={'cards':[c],'name':'Test','history':[]}
+        core.apply_workspace_plan(deck,[],[{'action':'set_card','card':'Candidate','fields':{'zone':'maybe'}}])
+        self.assertEqual(deck['cards'][0]['group'],'Draw')
     def test_snapshot_counts(self):
         r=core.analysis(self.deck)
         self.assertEqual(r['total'],100);self.assertEqual(r['lands'],37);self.assertEqual(r['mdfc'],1);self.assertEqual(r['average'],2.11)
@@ -184,6 +194,59 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(len(saved),1);self.assertEqual(saved[0]['kind'],'match')
         self.assertEqual(saved[0]['card']['image'],candidate['image'])
         self.assertIn('not been evaluated',saved[0]['reason'])
+    def test_considering_add_uses_existing_draw_category(self):
+        state=server.read_state();d=server.deck_of(state,state['active']);d['categories']=['Card Draw']
+        card=dict(core.make_entry('Candidate',1),oracle_text='Draw two cards.',type_line='Instant')
+        state['collection'].append(card);server.write_state(state)
+        with self.request('/api/card',{'deck':d['id'],'action':'add','card':core.make_entry('Candidate',1),'zone':'maybe'}) as response:json.load(response)
+        saved=server.deck_of(server.read_state(),d['id'])['cards'][-1]
+        self.assertEqual(saved['group'],'Card Draw');self.assertEqual(saved['oracle_text'],'Draw two cards.')
+    def test_import_considering_uses_saved_metadata(self):
+        state=server.read_state();d=server.deck_of(state,state['active']);state['collection'].append(dict(core.make_entry('Candidate',1),oracle_text='Draw two cards.',type_line='Instant'))
+        server.write_state(state)
+        with self.request('/api/import',{'deck':d['id'],'text':'Considering\n1 Candidate'}) as response:json.load(response)
+        saved=server.deck_of(server.read_state(),d['id'])['cards'][0]
+        self.assertEqual(saved['zone'],'maybe');self.assertEqual(saved['group'],'Draw')
+    def test_drag_board_move_autocategorizes_but_explicit_group_wins(self):
+        state=server.read_state();d=server.deck_of(state,state['active']);card=dict(core.make_entry('Candidate',1),oracle_text='Draw two cards.',type_line='Instant');d['cards'].append(card);server.write_state(state)
+        with self.request('/api/card',{'deck':d['id'],'action':'edit','id':card['id'],'zone':'maybe'}) as response:json.load(response)
+        self.assertEqual(server.deck_of(server.read_state(),d['id'])['cards'][-1]['group'],'Draw')
+        with self.request('/api/card',{'deck':d['id'],'action':'edit','id':card['id'],'group':'Uncategorized'}) as response:json.load(response)
+        with self.request('/api/auto-categorize',{'deck':d['id']}) as response:self.assertEqual(json.load(response)['categorized'],0)
+        self.assertEqual(server.deck_of(server.read_state(),d['id'])['cards'][-1]['group'],'Uncategorized')
+    def test_existing_considering_auto_button_undo_keeps_other_boards(self):
+        state=server.read_state();d=server.deck_of(state,state['active'])
+        d['cards'] += [dict(core.make_entry('Candidate',1,'Considering'),oracle_text='Draw two cards.',type_line='Instant'),dict(core.make_entry('Custom',1,'Considering'),group='My engine',oracle_text='Draw two cards.')]
+        before=copy.deepcopy(d['cards']);server.write_state(state)
+        with self.request('/api/auto-categorize',{'deck':d['id']}) as response:self.assertEqual(json.load(response)['categorized'],1)
+        saved=server.deck_of(server.read_state(),d['id'])['cards'];self.assertEqual(saved[:-2],before[:-2]);self.assertEqual(saved[-1]['group'],'My engine');self.assertEqual(saved[-2]['group'],'Draw')
+        with self.request('/api/undo',{'deck':d['id']}) as response:json.load(response)
+        self.assertEqual(server.deck_of(server.read_state(),d['id'])['cards'],before)
+    def test_mainboard_autocategorize_is_scoped_and_undoable(self):
+        state=server.read_state();d=server.deck_of(state,state['active'])
+        main=dict(core.make_entry('Main Candidate',1),oracle_text='Draw two cards.',type_line='Instant')
+        maybe=dict(core.make_entry('Maybe Candidate',1,'Considering'),oracle_text='Draw two cards.')
+        d['cards'] += [main,maybe];before=copy.deepcopy(d['cards']);server.write_state(state)
+        with self.request('/api/auto-categorize',{'deck':d['id'],'zone':'main'}) as response:
+            result=json.load(response);self.assertEqual(result['categorized'],1);self.assertTrue(result['undo_available'])
+        saved=server.deck_of(server.read_state(),d['id'])['cards']
+        self.assertEqual(saved[-2]['group'],'Draw');self.assertEqual(saved[-1],before[-1]);self.assertEqual(saved[0],before[0])
+        with self.request('/api/undo',{'deck':d['id']}) as response:json.load(response)
+        self.assertEqual(server.deck_of(server.read_state(),d['id'])['cards'],before)
+    def test_mainboard_new_card_gets_default_category(self):
+        state=server.read_state();d=server.deck_of(state,state['active'])
+        candidate=dict(core.make_entry('Candidate',1),type_line='Instant',oracle_text='Draw two cards.')
+        with self.request('/api/card',{'deck':d['id'],'action':'add','card':candidate,'zone':'main'}) as response:json.load(response)
+        saved=server.deck_of(server.read_state(),d['id'])['cards'][-1]
+        self.assertEqual(saved['group'],'Draw');self.assertEqual(saved['zone'],'main')
+    def test_autocategorize_rejects_commander_board(self):
+        state=server.read_state()
+        with self.assertRaises(urllib.error.HTTPError) as response:self.request('/api/auto-categorize',{'deck':state['active'],'zone':'commander'})
+        self.assertEqual(response.exception.code,400)
+    def test_autocategorize_noop_does_not_create_false_undo(self):
+        state=server.read_state();d=server.deck_of(state,state['active']);d['cards']=[];before=copy.deepcopy(d['history']);server.write_state(state)
+        with self.request('/api/auto-categorize',{'deck':d['id'],'zone':'main'}) as response:self.assertFalse(json.load(response)['undo_available'])
+        self.assertEqual(server.deck_of(server.read_state(),d['id'])['history'],before)
     def test_collection_only_blocks_unowned(self):
         s=server.read_state();d=server.deck_of(s,s['active']);p=d['proposals'][0]
         with patch.object(server,'lookup',return_value=core.make_entry(p['add'],1)):

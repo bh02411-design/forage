@@ -3,7 +3,7 @@
 import argparse, base64, copy, datetime, html, json, os, re, secrets, sqlite3, threading, time, urllib.error, urllib.parse, urllib.request, webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from core import uid, key, parse_import, make_entry, analysis, availability, mana_sample, apply_swap, category_names, normalize_category_changes, apply_category_changes, normalize_workspace_changes, apply_workspace_plan
+from core import auto_categorize_card, uid, key, parse_import, make_entry, analysis, availability, mana_sample, apply_swap, category_names, normalize_category_changes, apply_category_changes, normalize_workspace_changes, apply_workspace_plan
 from seed import initial_state
 import updater
 from advisor import FACT_FIELDS, ABILITIES, intents, catalog, commander_colors, evidence, GUIDANCE, check_recommendations, wants_draw_advice, preference_suggestion, card_facts, mana_value_filter, search_prompt
@@ -15,6 +15,16 @@ ACTIVE_WRITES=0
 REQUEST_LOCK=threading.RLock()
 TOKEN=secrets.token_urlsafe(32)
 LOCK=threading.RLock(); API_LOCK=threading.Lock(); LAST_CALL=0
+
+def categorize_board_card(state,deck,card,known=None):
+    if card.get('zone') not in ['main','maybe']:return False
+    source=(known if known is not None else catalog(state,deck)).get(key(card['name']),{})
+    if not card.get('type_line') and source.get('type_line'):
+        for field in ['land','mdfc']:
+            if field in source:card[field]=source[field]
+    for field in FACT_FIELDS+['image','land','mdfc','roles']:
+        if card.get(field) in [None,'',[]] and source.get(field) is not None:card[field]=copy.deepcopy(source[field])
+    return auto_categorize_card(deck,card)
 
 def visual_recommendations(state,deck,result):
     """UI metadata comes from the local catalog, never model-provided artwork."""
@@ -630,6 +640,8 @@ class Handler(BaseHTTPRequestHandler):
                                 old=prior[key(c['name'])]
                                 for field in ['mv','roles','protected','land','mdfc','oracle_text','type_line','image','color_identity','mana_cost','meta_source','scryfall_uri','scryfall_id','power','toughness','legalities']:
                                     if field in old:c[field]=old[field]
+                        known=catalog(state,deck)
+                        for card in cards:categorize_board_card(state,deck,card,known)
                         deck['cards']=cards; deck['source']='Imported '+datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
                         deck['history'].append({'id':uid(),'type':'import','summary':'Replaced deck from import','before':before})
                     write_state(state);return self.send_json({'ok':True,'warnings':warnings})
@@ -648,6 +660,13 @@ class Handler(BaseHTTPRequestHandler):
                         changes=plan['changes'] if plan else payload.get('changes')
                         apply_workspace_plan(deck,changes,plan.get('workspace_changes',[]) if plan else payload.get('workspace_changes',[]),plan['id'] if plan else None)
                         if plan:plan['status']='accepted'
+                elif path=='/api/auto-categorize':
+                    zone=payload.get('zone','maybe')
+                    if zone not in ['main','maybe']:raise ValueError('Choose Mainboard or Considering.')
+                    before=copy.deepcopy(deck['cards']);known=catalog(state,deck)
+                    changed=sum(categorize_board_card(state,deck,c,known) for c in deck['cards'] if c.get('zone')==zone)
+                    if deck['cards']!=before:deck['history'].append({'id':uid(),'type':'category','summary':'Auto-categorized '+('Mainboard' if zone=='main' else 'Considering')+': '+str(changed)+' cards','before':before})
+                    write_state(state);return self.send_json({'ok':True,'categorized':changed,'undo_available':deck['cards']!=before,'unresolved':sum(c.get('zone')==zone and c.get('group')=='Uncategorized' for c in deck['cards'])})
                 elif path=='/api/card':
                     action=payload.get('action'); before=copy.deepcopy(deck['cards']); c=next((x for x in deck['cards'] if x['id']==payload.get('id')),None)
                     if action=='add':
@@ -656,8 +675,9 @@ class Handler(BaseHTTPRequestHandler):
                         zone=payload.get('zone','maybe')
                         if zone not in ['main','maybe','commander']:raise ValueError('Invalid board.')
                         existing=next((x for x in deck['cards'] if key(x['name'])==key(new['name']) and x['zone']==zone),None)
-                        if existing:existing['qty']+=1
-                        else:new.update({'id':uid(),'qty':1,'zone':zone});deck['cards'].append(new)
+                        if existing:existing['qty']+=1;categorize_board_card(state,deck,existing)
+                        else:
+                            new.update({'id':uid(),'qty':1,'zone':zone});categorize_board_card(state,deck,new);deck['cards'].append(new)
                     elif not c:raise ValueError('Card not found.')
                     elif action=='remove':
                         if c.get('protected'):raise ValueError('Unprotect this card before removing it.')
@@ -666,6 +686,8 @@ class Handler(BaseHTTPRequestHandler):
                         for k in ['group','roles','protected','zone','mv','land','mdfc','qty']:
                             if k in payload:c[k]=payload[k]
                         if c['zone'] not in ['main','maybe','commander'] or not isinstance(c['qty'],int) or not 1<=c['qty']<=100000:raise ValueError('Invalid card quantity or board.')
+                        if 'group' in payload:c['category_manual']=True
+                        elif payload.get('zone') in ['main','maybe']:categorize_board_card(state,deck,c)
                         if c.get('mv') is not None and (not isinstance(c['mv'],(int,float)) or not 0<=c['mv']<1000):raise ValueError('Invalid mana value.')
                     elif action=='enrich':
                         new=payload['card']
@@ -673,6 +695,7 @@ class Handler(BaseHTTPRequestHandler):
                         for k in ['mv','mana_cost','type_line','oracle_text','image','color_identity','scryfall_uri','scryfall_id','meta_source','game_changer','land','mdfc','power','toughness','legalities']: 
                             if k in new:c[k]=new[k]
                         if not c.get('roles'):c['roles']=new.get('roles',[])
+                        categorize_board_card(state,deck,c)
                     else:raise ValueError('Unknown card action.')
                     if action!='enrich':deck['history'].append({'id':uid(),'type':'card','summary':action.capitalize()+' card: '+(c['name'] if c else payload['card']['name']),'before':before})
                 elif path=='/api/memory':

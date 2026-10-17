@@ -86,3 +86,11 @@ console.log('8 pending-decision header/layout checks passed.');
  await nodes['#version-switch-confirm'].onclick();assert.equal(nodes['#version-switch-message'].textContent,'Incompatible workspace');assert.equal(nodes['#version-switch-confirm'].disabled,false);
  console.log('9 update-history/version-selection checks passed.');
 })().catch(error=>{console.error(error);process.exitCode=1});
+
+(async()=>{
+ const calls=[],button={},context={zone:'main',groupBy:'type',$:()=>button,run:fn=>fn(),toast:()=>{},mutate:async(path,payload)=>{calls.push([path,payload]);return {categorized:1,unresolved:0,undo_available:true}}};
+ vm.createContext(context);vm.runInContext(app.slice(app.indexOf("$('#auto-categorize').onclick="),app.indexOf("$('#new-category').onclick=")),context);
+ await button.onclick();assert.equal(calls[0][1].zone,'main');assert.equal(calls[1][1].settings.group_by,'category');
+ context.zone='maybe';await button.onclick();assert.equal(calls[2][1].zone,'maybe');
+ console.log('3 board auto-categorization control checks passed.');
+})().catch(error=>{console.error(error);process.exitCode=1});

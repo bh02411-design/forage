@@ -74,6 +74,11 @@ History uses published releases from your configured GitHub repository. Cached h
 
 ### Changelog
 
+**0.2.11**
+
+- Automatically categorize unassigned cards entering Mainboard or Considering.
+- Add an undoable Auto-categorize button; retain custom assignments.
+
 **0.2.10**
 
 - Render prose-prefixed, fenced and nested AI JSON as readable chat.
@@ -123,3 +128,5 @@ History uses published releases from your configured GitHub repository. Cached h
 
 - Introduce supervised GitHub release installation, application backups and startup recovery.
 
+
+Mainboard and Considering use existing categories where possible, based on saved roles, then card text, then card type. These defaults are editable presentation heuristics. Unresolved cards stay Uncategorized until metadata is available. Adding, moving, importing and resolving cards all use this behavior. Each board’s Auto-categorize button organizes existing unassigned cards on that board without changing custom categories; Undo restores the prior board. No AI request is needed.

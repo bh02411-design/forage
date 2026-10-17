@@ -11,6 +11,7 @@ MAX_PACKAGE=20*1024*1024
 
 # Release notes stay in an existing updater file so older installers accept the package.
 CHANGELOG={
+ '0.2.11':['Auto-categorize unassigned cards entering Mainboard or Considering using saved roles and card text.','Add an undoable Auto-categorize button on each board; preserve custom categories.'],
  '0.2.10':['Render prose-prefixed, fenced and nested AI JSON as readable chat.','Preserve embedded swap proposals for validation and graphical decisions instead of displaying internal fields.'],
  '0.2.9':['Add Update history with readable changes, installed-version labels and stable-release selection.','Check workspace compatibility and create a workspace snapshot before switching or rolling back.'],
  '0.2.8':['Move pending card choices, swaps and category plans into the chat header.','Remove the duplicate On the table section and bring analytics up.'],

@@ -112,9 +112,48 @@ def apply_swap(state,deck,proposal,new_card,override=False):
     old['qty']-=1
     if old['qty']==0: deck['cards'].remove(old)
     new_card=copy.deepcopy(new_card); new_card.update({'id':uid(),'qty':1,'zone':'main'})
+    auto_categorize_card(deck,new_card)
     deck['cards'].append(new_card)
     proposal['status']='accepted'
     deck['history'].append({'id':uid(),'type':'swap','before':before,'proposal_id':proposal['id'],'summary':proposal['cut']+' → '+new_card['name']})
+
+# These are presentation defaults, not verified strategic role classifications.
+GENERIC_CATEGORIES={'','uncategorized','main','mainboard','maybe','maybeboard','considering','sideboard','commander'}
+CATEGORY_RULES=[
+ ('Draw',['Card Draw','Draw'],r'\bdraw(?:s)?\b'),
+ ('Removal',['Removal','Interaction'],r'\b(?:destroy|exile) (?:target|all|each)\b|\b(?:each|target) opponent sacrifices\b|\beach player sacrifices a (?:nontoken )?creature\b'),
+ ('Ramp',['Ramp','Mana'],r'\badd (?:an amount|one|two|three|[0-9]|\{)|search your library for (?:a|an|up to [^.,]+) [^.,]*land'),
+ ('Mill',['Mill'],r'\bmill(?:s)?\b'),
+ ('Recursion',['Recursion','Reanimation'],r'\breturn\b[^.]*\bfrom (?:your|a) graveyard\b'),
+ ('Protection',['Protection'],r'\b(?:hexproof|indestructible)\b'),
+ ('Tokens',['Tokens','Token Generation'],r'\bcreate\b[^.]*\btoken'),
+ ('Sacrifice',['Sacrifice','Sac Outlets'],r'\bsacrifice\b'),
+ ('Food',['Food'],r'\bfood\b')
+]
+
+def auto_categorize_card(deck,card):
+    """Fill an unassigned board category; never replace a deliberate category."""
+    if card.get('zone') not in ['main','maybe'] or card.get('category_manual') or str(card.get('group','')).casefold() not in GENERIC_CATEGORIES:return False
+    previous=card.get('group');label=None
+    for peer in deck['cards']:
+        if peer is not card and key(peer['name'])==key(card['name']) and str(peer.get('group','')).casefold() not in GENERIC_CATEGORIES:
+            label=peer['group'];break
+    names=category_names(deck);existing={n.casefold():n for n in names}
+    def choose(default,aliases):return next((existing[a.casefold()] for a in aliases if a.casefold() in existing),default)
+    roles=[str(role).split(':')[0].strip().casefold() for role in card.get('roles',[])]
+    if not label and (card.get('land') or 'land' in roles):label=choose('Land',['Land','Lands'])
+    if not label:
+        for default,aliases,pattern in CATEGORY_RULES:
+            if any(role in [a.casefold() for a in aliases] for role in roles):label=choose(default,aliases);break
+    if not label:
+        for default,aliases,pattern in CATEGORY_RULES:
+            if re.search(pattern,card.get('oracle_text') or '',re.I):label=choose(default,aliases);break
+    if not label:
+        typ=card.get('type_line') or ''
+        for kind in ['Creature','Planeswalker','Instant','Sorcery','Enchantment','Artifact','Battle']:
+            if kind in typ:label=choose(kind,[kind,kind+'s']);break
+    card['group']=label or 'Uncategorized'
+    return bool(label and card['group']!=previous)
 
 # Primary presentation categories are separate from overlapping analytical roles.
 def category_names(deck):
@@ -160,7 +199,7 @@ def _perform_category_change(deck,item):
     elif action=='move':
         names={key(n) for n in item['cards']}
         for c in deck['cards']:
-            if key(c['name']) in names:c['group']=item['to']
+            if key(c['name']) in names:c['group']=item['to'];c['category_manual']=True
     elif action=='delete':
         if any(c.get('group','Uncategorized')==item['from'] for c in deck['cards']):raise ValueError('This category contains cards. Move them or merge the category first; cards will not be deleted.')
         categories.discard(item['from'])
@@ -221,7 +260,10 @@ def apply_workspace_plan(deck,categories,changes,plan_id=None):
         if c['action']=='rename_deck':probe['name']=c['name']
         elif c['action']=='set_card':
             for card in probe['cards']:
-                if card['name']==c['card']:card.update(c['fields'])
+                if card['name']==c['card']:
+                    card.update(c['fields'])
+                    if 'group' in c['fields']:card['category_manual']=True
+                    elif c['fields'].get('zone') in ['main','maybe']:auto_categorize_card(probe,card)
         elif c['action']=='set_view':probe.setdefault('view_settings',{}).update(c['fields'])
     history={'id':uid(),'type':'workspace','summary':'Apply '+str(len(cats)+len(edits))+' category / workspace changes','before':copy.deepcopy(deck['cards']),'before_categories':copy.deepcopy(deck.get('categories')),'before_name':deck['name'],'before_view_settings':copy.deepcopy(deck.get('view_settings')),'category_plan_id':plan_id}
     for k in ['cards','categories','name','view_settings']:

@@ -42,6 +42,7 @@ function render(){
   $('#collection-count').textContent=state.collection.reduce((n,c)=>n+c.qty,0).toLocaleString();$('#memory-count').textContent=state.memories.length;
 }
 function renderDeck(){
+ $('#auto-categorize').title='Categorize unassigned cards on '+(zone==='main'?'Mainboard':'Considering');
  const filter=$('#deck-search').value.toLowerCase(),cards=deck().cards.filter(c=>(zone==='main'?['main','commander'].includes(c.zone):c.zone==='maybe')&&(c.zone==='commander'||`${c.name} ${(c.roles||[]).join(' ')} ${c.type_line||''} ${c.oracle_text||''}`.toLowerCase().includes(filter)));
  $('#card-count').textContent=cards.reduce((a,c)=>a+c.qty,0)+' cards';
  const entries=ForageCards.groups(cards,groupBy,sortBy);
@@ -271,6 +272,10 @@ function syncViewSettings(){
  $('.workspace').classList.toggle('deck-expanded',deckExpanded);$('#focus-deck').textContent=deckExpanded?'Show conversation ↙':'Expand deck ↗';$('#focus-deck').setAttribute('aria-pressed',String(deckExpanded));
 }
 function persistView(fields){run(()=>mutate('view',{settings:fields}))}
+$('#auto-categorize').onclick=()=>run(async()=>{
+ const result=await mutate('auto-categorize',{zone});groupBy='category';await mutate('view',{settings:{group_by:'category'}});
+ toast(result.categorized+' cards categorized. Custom categories kept.'+(result.unresolved?' '+result.unresolved+' unresolved; resolve card data to improve matches.':'')+(result.undo_available?' Undo is available.':''));
+});
 $('#new-category').onclick=()=>{modal('New category','<label class="field">Category name<input id="create-category-name" maxlength="80" placeholder="For example: Free sacrifice outlets"></label><button id="create-category" class="button primary">Create category</button>');$('#create-category').onclick=()=>run(async()=>{await mutate('category',{changes:[{action:'create',to:$('#create-category-name').value}]});groupBy='category';closeModal();persistView({group_by:'category'});toast('Category created. Drag cards into it.');});};
 $('#deck-name').onclick=()=>{modal('Rename deck',`<label class="field">Deck name<input id="rename-deck-name" value="${esc(deck().name)}" maxlength="80"></label><button id="rename-deck-save" class="button primary">Save name</button>`);$('#rename-deck-save').onclick=()=>run(async()=>{await mutate('category',{changes:[],workspace_changes:[{action:'rename_deck',name:$('#rename-deck-name').value}]});closeModal();toast('Deck renamed.');});};
 $('#deck-name').onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();$('#deck-name').click()}};
