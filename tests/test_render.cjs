@@ -12,6 +12,18 @@ console.log('8 chat-rendering checks passed.');
 assert.ok(!render('<|tool_call>call:collection_search{query:draw}<tool_call|>').includes('<|tool_call>'));
 console.log('Saved tool-request display check passed.');
 
+const embedded={reply:'**Readable** swap.\n\n### Tradeoff\n\n* One benefit\n* One cost',recommendations:[],proposals:[{add:'Candidate',cut:'Existing',reason:'Tradeoff'}],memory_suggestions:[]};
+const wrapped='This proposal respects your preferences.\n\n```json\n'+JSON.stringify(embedded,null,2)+'\n```';
+assert.equal(cleanReply(wrapped),embedded.reply);
+assert.ok(!render(wrapped).includes('&quot;proposals&quot;'));assert.ok(!render(wrapped).includes('<pre>'));
+assert.match(render(wrapped),/<h3>Tradeoff<\/h3>/);assert.match(render(wrapped),/<ul>/);
+assert.equal(cleanReply('At {1}{B}, consider this.\n'+JSON.stringify(embedded)),embedded.reply);
+assert.equal(cleanReply(JSON.stringify({reply:wrapped})),embedded.reply);
+assert.equal(cleanReply('Intro\n```json\n{"reply":"Readable","proposals":['),'Readable');
+assert.ok(!render('Intro\n```json\n{"reply":"<img src=x onerror=alert(1)>","proposals":[]}\n```').includes('<img'));
+assert.equal(cleanReply('Ordinary prose with {1}{B}.'),'Ordinary prose with {1}{B}.');
+console.log('10 mixed prose/JSON formatting checks passed.');
+
 // Exercise the actual chat renderer against scroll metrics, not a separate model.
 const vm=require('node:vm'),fs=require('node:fs');
 const app=fs.readFileSync(require.resolve('../static/app.js'),'utf8');

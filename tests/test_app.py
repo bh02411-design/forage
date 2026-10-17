@@ -75,6 +75,22 @@ class CoreTests(unittest.TestCase):
             r=server.ai_chat(self.state,self.deck,'What next?')
             self.assertEqual(r['reply'],'Keep the fixture.')
             data=mock.call_args.args[1];self.assertIn('Fixture Protected Creature',data['messages'][0]['content']);self.assertEqual(data['model'],'test-model')
+    def test_prose_before_fenced_swap_retains_controls(self):
+        proposal={'add':'Candidate','cut':'Existing','reason':'Compare these options.'}
+        text='This proposal respects your preferences.\n\n```json\n'+json.dumps({'reply':'**Readable** swap.','recommendations':[],'proposals':[proposal]})+'\n```'
+        parsed=server.parse_model_output(text)
+        self.assertEqual(parsed['reply'],'**Readable** swap.');self.assertEqual(parsed['proposals'],[proposal])
+        self.assertEqual(server.readable_history(text),'**Readable** swap.')
+    def test_nested_reply_envelope_is_unwrapped(self):
+        inner={'reply':'Readable answer\n\nSecond paragraph','proposals':[{'add':'Candidate','cut':'Existing','reason':'Tradeoff'}]}
+        parsed=server.parse_model_output(json.dumps({'reply':'Introduction\n```json\n'+json.dumps(inner)+'\n```'}))
+        self.assertEqual(parsed['reply'],'Readable answer\n\nSecond paragraph');self.assertEqual(parsed['proposals'],inner['proposals'])
+    def test_embedded_response_after_mana_braces(self):
+        parsed=server.parse_model_output('At {1}{B}, consider this.\n'+json.dumps({'reply':'Readable answer','proposals':[]}))
+        self.assertEqual(parsed['reply'],'Readable answer')
+    def test_truncated_embedded_envelope_hides_internal_fields(self):
+        parsed=server.parse_model_output('Intro\n```json\n{"reply":"Readable answer","proposals":[')
+        self.assertEqual(parsed['reply'],'Readable answer');self.assertEqual(parsed['proposals'],[])
     def test_plain_ai_reply_supported(self):
         self.state['settings']['model']='test'
         with patch.object(server,'request_json',return_value={'choices':[{'message':{'content':'A plain answer'}}]}):

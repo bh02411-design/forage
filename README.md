@@ -74,6 +74,11 @@ History uses published releases from your configured GitHub repository. Cached h
 
 ### Changelog
 
+**0.2.10**
+
+- Render prose-prefixed, fenced and nested AI JSON as readable chat.
+- Preserve embedded swap proposals for validation and graphical decisions instead of displaying internal fields.
+
 **0.2.9**
 
 - Add Update history with readable changes, installed-version labels and stable-release selection.

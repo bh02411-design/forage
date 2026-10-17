@@ -2,14 +2,32 @@
 (function(root){
 'use strict';
 const escape=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function embeddedReply(s){
+ const candidates=[...s.matchAll(/\{\s*"(?:reply|recommendations|proposals|memory_suggestions|collection_search|category_changes|workspace_changes)"\s*:/g)];
+ for(const match of candidates){
+  const start=match.index;let depth=0,quoted=false,escaped=false;
+  for(let i=start;i<s.length;i++){
+   const ch=s[i];
+   if(quoted){if(escaped)escaped=false;else if(ch==='\\')escaped=true;else if(ch==='"')quoted=false;continue}
+   if(ch==='"'){quoted=true;continue}if(ch==='{')depth++;if(ch==='}'&&--depth===0){try{const d=JSON.parse(s.slice(start,i+1));if(typeof d.reply==='string')return d.reply}catch{}break}
+  }
+  const m=/"reply"\s*:\s*/.exec(s.slice(start));
+  if(m){const offset=start+m.index+m[0].length;if(s[offset]==='"'){let escaped=false;for(let i=offset+1;i<s.length;i++){if(escaped){escaped=false;continue}if(s[i]==='\\'){escaped=true;continue}if(s[i]==='"'){try{return JSON.parse(s.slice(offset,i+1))}catch{break}}}}}
+ }
+ return null;
+}
 function cleanReply(text){
  if(/<\|tool_call>|<tool_call\|>|<tool_call>/.test(String(text??'')))return 'This earlier reply was an unhandled collection-search request. Retry the question with the updated app.';
- let s=String(text??'').trim().replace(/^```(?:json)?\s*|\s*```$/g,'');
- if(!s.startsWith('{'))return s;
- try{const d=JSON.parse(s);if(typeof d.reply==='string')return d.reply.replace(/\\n/g,'\n')}catch{}
- const m=/"reply"\s*:\s*/.exec(s);
- if(m){const start=m.index+m[0].length;if(s[start]==='"'){let escaped=false;for(let i=start+1;i<s.length;i++){if(escaped){escaped=false;continue}if(s[i]==='\\'){escaped=true;continue}if(s[i]==='"'){try{return JSON.parse(s.slice(start,i+1)).replace(/\\n/g,'\n')}catch{break}}}}}
- return 'This saved response has malformed formatting. Please ask Forage to retry it.';
+ let s=String(text??'').trim();
+ for(let depth=0;depth<4;depth++){
+  const reply=embeddedReply(s);
+  if(reply===null){
+   if(s.startsWith('{')||/\{\s*"reply"\s*:/.test(s))return 'This saved response has malformed formatting. Please ask Forage to retry it.';
+   return s.replace(/\\n/g,'\n');
+  }
+  s=reply.trim();
+ }
+ return 'This saved response has nested formatting that could not be displayed. Please ask Forage to retry it.';
 }
 function inline(text){return String(text).split(/(`[^`]+`)/g).map(part=>part.startsWith('`')&&part.endsWith('`')?'<code>'+escape(part.slice(1,-1))+'</code>':escape(part).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>')).join('')}
 function render(text){

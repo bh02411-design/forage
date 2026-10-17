@@ -118,7 +118,7 @@ async function recommendationAction(button){
  if(busy){toast('Wait for the current reply to finish.');return}
  if(action==='find'||action==='different'){
   if($('#message').value.trim()||pendingCard||pendingImage){toast('Send or clear your current draft first.');return}
-  const request=`Find one concrete swap to add ${c.name} to my current mainboard. Keep ${c.name} as the addition. ${action==='different'&&p?`Suggest a different cut from ${p.cut}; I have not accepted that swap.`:'Compare my current cards and suggest the best cut.'} Explain the tradeoff and return a structured swap proposal.`;
+  const request=`Find one concrete swap to add ${c.name} to my current mainboard. Keep ${c.name} as the addition. ${action==='different'&&p?`Suggest a different cut from ${p.cut}; I have not accepted that swap.`:'Compare my current cards and suggest the best cut.'} Explain the tradeoff and propose the swap.`;
   closeModal();$('#message').value=request;await sendChat();return;
  }
  await run(async()=>{

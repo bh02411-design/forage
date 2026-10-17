@@ -72,6 +72,17 @@ class TerraDrawTests(unittest.TestCase):
         self.assertTrue(advisor.check_recommendations(self.state,self.deck,{'proposals':[{'add':"Night's Whisper",'cut':'Cathartic Reunion','reason':'More hand advantage'}]}))
     def test_valid_alternative_passes(self):
         self.assertFalse(advisor.check_recommendations(self.state,self.deck,{'recommendations':[self.rec(self.whisper)]}))
+    def test_button_style_fenced_swap_gets_checked_visual_card(self):
+        proposal={'add':self.whisper['name'],'cut':self.reunion['name'],'reason':'Compare immediate hand advantage with filtering.'}
+        text='This proposal respects your preferences.\n\n```json\n'+json.dumps({'reply':'A readable swap explanation.','recommendations':[],'proposals':[proposal]})+'\n```'
+        fake={'choices':[{'message':{'content':text}}]}
+        with patch.object(server,'request_json',return_value=fake) as model:
+            result=server.ai_chat(self.state,self.deck,"Find one concrete swap to add Night's Whisper. Explain the tradeoff and propose the swap.")
+        self.assertEqual(model.call_count,1);self.assertEqual(result['proposals'],[proposal])
+        self.assertEqual(result['reply'],'A readable swap explanation.')
+        self.assertEqual(result['_context_trace']['recommendation_checks']['status'],'passed')
+        cards=server.visual_recommendations(self.state,self.deck,result)
+        self.assertEqual(cards[0]['card']['name'],self.whisper['name'])
     def test_invalid_answer_gets_one_repair(self):
         bad={'reply':'Add Cathartic Reunion.','recommendations':[self.rec(self.reunion)]}
         good={'reply':"Add Night's Whisper for immediate hand advantage.",'recommendations':[self.rec(self.whisper)]}
