@@ -98,17 +98,89 @@ class UpdateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'symlink'):updater.install_pending(self.root,self.data)
         self.assertEqual(target.read_text(),'unchanged')
 
+class VersionHistoryTests(unittest.TestCase):
+    setUp=UpdateTests.setUp
+    tearDown=UpdateTests.tearDown
+    staged=UpdateTests.staged
+    def write_workspace(self,number=1):
+        with sqlite3.connect(self.data/'forage.sqlite3') as con:
+            con.execute('CREATE TABLE IF NOT EXISTS workspace(id INTEGER PRIMARY KEY,payload TEXT)')
+            con.execute('INSERT OR REPLACE INTO workspace VALUES(1,?)',(json.dumps({'version':number,'decks':[{'name':'Keep this deck'}]}),))
+    def make_older_release(self):
+        updater.write_json(self.root/'version.json',{'version':'0.2.2','update_format':1})
+        self.write_workspace()
+    def test_selected_downgrade_and_forward_preserve_data(self):
+        self.make_older_release();before=(self.data/'forage.sqlite3').read_bytes()
+        with patch.object(updater,'fetch',side_effect=[json.dumps(self.release).encode(),self.payload]):
+            updater.stage(self.root,self.data,'0.2.1')
+        updater.install_pending(self.root,self.data)
+        self.assertEqual(updater.current_version(self.root),'0.2.1')
+        with sqlite3.connect(self.data/'forage.sqlite3') as con:self.assertEqual(json.loads(con.execute('SELECT payload FROM workspace').fetchone()[0])['decks'][0]['name'],'Keep this deck')
+        self.assertEqual((self.data/'forage.sqlite3').read_bytes(),before)
+        self.assertEqual(len(list((self.data/'updates'/'backups').glob('*/workspace.sqlite3'))),1)
+        updater.rollback(self.root,self.data);self.assertEqual(updater.current_version(self.root),'0.2.2')
+        self.assertEqual(len(list((self.data/'updates'/'rollback-snapshots').glob('*/workspace.sqlite3'))),1)
+    def test_undeclared_future_format_is_blocked(self):
+        with self.assertRaisesRegex(ValueError,'declare'):updater.check_compatibility({'version':'0.3.0'},self.data)
+    def test_declared_future_compatible_format_is_allowed(self):
+        updater.check_compatibility({'version':'0.3.0','workspace_versions':[1]},self.data)
+    def test_boolean_schema_is_not_an_integer_schema(self):
+        with self.assertRaises(ValueError):updater.check_compatibility({'version':'0.3.0','workspace_versions':[True]},self.data)
+    def test_incompatible_target_is_blocked_before_staging(self):
+        self.make_older_release();self.write_workspace(2)
+        with patch.object(updater,'fetch',side_effect=[json.dumps(self.release).encode(),self.payload]):
+            with self.assertRaisesRegex(ValueError,'incompatible'):updater.stage(self.root,self.data,'0.2.1')
+        self.assertIsNone(updater.read_json(self.data/'updates'/'pending.json'));self.assertEqual(updater.current_version(self.root),'0.2.2')
+    def test_compatibility_rechecked_at_install(self):
+        self.staged();self.write_workspace(2)
+        with self.assertRaisesRegex(ValueError,'incompatible'):updater.install_pending(self.root,self.data)
+        self.assertEqual(updater.current_version(self.root),'0.2.0')
+    def test_rollback_rechecks_current_workspace_format(self):
+        self.staged();updater.install_pending(self.root,self.data);self.write_workspace(2)
+        with self.assertRaisesRegex(ValueError,'incompatible'):updater.preflight_rollback(self.data)
+        with self.assertRaisesRegex(ValueError,'incompatible'):updater.rollback(self.root,self.data)
+        self.assertEqual(updater.current_version(self.root),'0.2.1')
+    def test_stale_selection_is_blocked(self):
+        self.make_older_release()
+        with patch.object(updater,'fetch',side_effect=[json.dumps(self.release).encode(),self.payload]):updater.stage(self.root,self.data,'0.2.1')
+        updater.write_json(self.root/'version.json',{'version':'0.2.3','update_format':1})
+        with self.assertRaisesRegex(ValueError,'changed after staging'):updater.install_pending(self.root,self.data)
+    def test_history_sorts_and_marks_current_version(self):
+        with patch.object(updater,'fetch',return_value=json.dumps([self.release]).encode()):history=updater.release_history(self.root,self.data)
+        self.assertEqual([row['version'] for row in history['releases']],['0.2.1','0.2.0'])
+        self.assertTrue(history['releases'][0]['available']);self.assertTrue(history['releases'][1]['installed'])
+    def test_history_caches_for_offline_reading(self):
+        with patch.object(updater,'fetch',return_value=json.dumps([self.release]).encode()):updater.release_history(self.root,self.data)
+        with patch.object(updater,'fetch',side_effect=OSError('offline')):history=updater.release_history(self.root,self.data)
+        self.assertIn('offline',history['offline_error']);self.assertEqual(history['releases'][0]['version'],'0.2.1')
+    def test_history_does_not_reuse_different_repository_cache(self):
+        with patch.object(updater,'fetch',return_value=json.dumps([self.release]).encode()):updater.release_history(self.root,self.data)
+        updater.configure(self.data,'other/repo')
+        with patch.object(updater,'fetch',side_effect=OSError('offline')):history=updater.release_history(self.root,self.data)
+        self.assertEqual(len(history['releases']),1)
+    def test_bundled_notes_readable_when_offline(self):
+        updater.configure(self.data,updater.DEFAULT_REPOSITORY)
+        with patch.object(updater,'fetch',side_effect=OSError('offline')):history=updater.release_history(self.root,self.data)
+        release=next(row for row in history['releases'] if row['version']=='0.2.8')
+        self.assertIn('On the table',release['changes'][1]);self.assertFalse(release['available'])
+    def test_history_excludes_prerelease_and_bad_asset(self):
+        invalid=dict(self.release,prerelease=True)
+        with patch.object(updater,'fetch',return_value=json.dumps([invalid]).encode()):history=updater.release_history(self.root,self.data)
+        self.assertEqual(len(history['releases']),1)
+
 @unittest.skipUnless(os.name=='posix','Supervisor process-group tests run on POSIX CI; Windows launcher needs local verification.')
 class SupervisorTests(unittest.TestCase):
     setUp=UpdateTests.setUp
     tearDown=UpdateTests.tearDown
     staged=UpdateTests.staged
-    def lifecycle(self,broken=False):
+    def lifecycle(self,broken=False,switch_back=False):
         import signal, socket, subprocess, time, urllib.request
         updater.configure(self.data,'example/forage',False)
         if broken:
             (self.source/'server.py').write_text("raise RuntimeError('deliberate startup failure')\n")
             build_release.build(self.source,self.archive);self.payload=self.archive.read_bytes();self.digest=hashlib.sha256(self.payload).hexdigest();self.release['assets'][0]['digest']='sha256:'+self.digest
+        if switch_back:
+            older_archive=self.base/'older.zip';build_release.build(self.root,older_archive);older_payload=older_archive.read_bytes()
         self.staged()
         with socket.socket() as probe:probe.bind(('127.0.0.1',0));port=probe.getsockname()[1]
         base='http://127.0.0.1:'+str(port)
@@ -135,6 +207,15 @@ class SupervisorTests(unittest.TestCase):
                 call('updates',{'action':'restart'},token)
                 installed=wait_health('0.2.0' if broken else '0.2.1',before['instance'])
                 self.assertEqual(call('state')['state']['decks'],state['state']['decks'])
+                if switch_back:
+                    self.assertTrue(call('updates/status')['version_switch_supported'])
+                    older_release={'tag_name':'v0.2.0','assets':[{'name':'Forage-update.zip','browser_download_url':'https://github.com/example/forage/releases/download/v0.2.0/Forage-update.zip','digest':'sha256:'+hashlib.sha256(older_payload).hexdigest()}]}
+                    with patch.object(updater,'fetch',side_effect=[json.dumps(older_release).encode(),older_payload]):updater.stage(self.root,self.data,'0.2.0')
+                    token=call('state')['token'];call('updates',{'action':'restart'},token)
+                    previous=wait_health('0.2.0',installed['instance'])
+                    self.staged();token=call('state')['token'];call('updates',{'action':'restart'},token)
+                    installed=wait_health('0.2.1',previous['instance'])
+                    self.assertEqual(call('state')['state']['decks'],state['state']['decks'])
                 if not broken:
                     token=call('state')['token'];call('updates',{'action':'rollback'},token)
                     wait_health('0.2.0',installed['instance'])
@@ -143,6 +224,7 @@ class SupervisorTests(unittest.TestCase):
                     os.killpg(process.pid,signal.SIGINT)
                     try:process.wait(timeout=10)
                     except subprocess.TimeoutExpired:os.killpg(process.pid,signal.SIGKILL);process.wait()
+    def test_switch_backward_and_forward(self):self.lifecycle(switch_back=True)
     def test_full_update_restart_and_rollback(self):self.lifecycle()
     def test_failed_updated_server_restores_previous(self):self.lifecycle(broken=True)
 

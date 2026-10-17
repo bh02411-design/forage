@@ -58,3 +58,19 @@ dialog.open=true;title.textContent='Pending decisions';pendingContext.renderProp
 pendingContext.deck=()=>({cards:[],chat:[],proposals:[]});pendingContext.renderProposals();assert.equal(pendingButton.textContent,'Pending decisions · 0');assert.equal(pendingButton.highlight,false);
 const index=fs.readFileSync(require.resolve('../static/index.html'),'utf8');assert.ok(!index.includes('proposal-section'));assert.ok(index.includes('id="pending-decisions"'));assert.ok(!index.includes('id="proposals"'));
 console.log('8 pending-decision header/layout checks passed.');
+
+(async()=>{
+ const requests=[],modals=[],nodes={};
+ for(const id of ['history-updates-back','version-switch-confirm','version-switch-cancel','version-switch-message'])nodes['#'+id]={disabled:false,textContent:''};
+ const releaseButton={dataset:{releaseVersion:'0.2.8'}};
+ const info={current_version:'0.2.9',supervised:true,version_switch_supported:true,instance:'before'};
+ const ctx={api:async(path,payload)=>{requests.push([path,payload]);return path==='updates/status'?info:path==='updates/history'?{workspace_version:1,releases:[{version:'0.2.9',installed:true,changes:['History screen']},{version:'0.2.8',direction:'older',available:true,changes:['Move analytics up']}]}:{}},
+  modal:(title,html)=>modals.push({title,html}),esc:s=>String(s??'').replace(/</g,'&lt;'),ForageText:{render},$:s=>nodes[s],$$:()=>[releaseButton],run:fn=>fn(),setInterval:()=>123};
+ vm.createContext(ctx);vm.runInContext(app.slice(app.indexOf('async function updateHistoryDialog(')),ctx);
+ await ctx.updateHistoryDialog();assert.match(modals.at(-1).html,/Installed.*0.2.9/);assert.match(modals.at(-1).html,/Move analytics up/);assert.match(modals.at(-1).html,/Switch back to/);
+ releaseButton.onclick();assert.equal(modals.at(-1).title,'Switch Forage version');assert.match(modals.at(-1).html,/Deck edits are not reverted/);
+ await nodes['#version-switch-confirm'].onclick();assert.equal(requests.at(-2)[1].version,'0.2.8');assert.equal(requests.at(-1)[1].action,'restart');
+ ctx.api=async()=>{throw Error('Incompatible workspace')};requests.length=0;
+ await nodes['#version-switch-confirm'].onclick();assert.equal(nodes['#version-switch-message'].textContent,'Incompatible workspace');assert.equal(nodes['#version-switch-confirm'].disabled,false);
+ console.log('9 update-history/version-selection checks passed.');
+})().catch(error=>{console.error(error);process.exitCode=1});

@@ -97,6 +97,14 @@ class HttpTests(unittest.TestCase):
     def test_static_and_state(self):
         with self.request('/') as r:self.assertEqual(r.status,200);self.assertIn(b'forage',r.read())
         with self.request('/api/state') as r:self.assertEqual(json.load(r)['state']['version'],1)
+    def test_version_selection_requires_updated_launcher_before_download(self):
+        with patch.dict(os.environ,{'FORAGE_VERSION_SWITCH':'','FORAGE_LAUNCHER':'1'}),patch.object(server.updater,'stage') as stage:
+            with self.assertRaises(urllib.error.HTTPError) as response:self.request('/api/updates',{'action':'stage','version':'0.2.8'})
+            self.assertEqual(response.exception.code,400);self.assertIn('reopen Start-Forage.bat',json.load(response.exception)['error']);stage.assert_not_called()
+    def test_update_history_endpoint_returns_notes(self):
+        with patch.object(server.updater,'fetch',side_effect=OSError('offline')):
+            with self.request('/api/updates/history') as response:data=json.load(response)
+        self.assertEqual(data['current_version'],server.updater.current_version(server.ROOT));self.assertTrue(any(row.get('changes') for row in data['releases']))
     def test_csrf_blocks_mutation(self):
         with self.assertRaises(urllib.error.HTTPError) as e:self.request('/api/settings',{'model':'oops'},token=False)
         self.assertEqual(e.exception.code,403)

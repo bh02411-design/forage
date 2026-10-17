@@ -463,7 +463,10 @@ class Handler(BaseHTTPRequestHandler):
         path=urllib.parse.urlsplit(self.path).path
         if path=='/api/health':return self.send_json({'version':updater.current_version(ROOT),'instance':INSTANCE_ID})
         if path=='/api/updates/status':
-            result=updater.status(ROOT,DATA);result['supervised']=os.environ.get('FORAGE_LAUNCHER')=='1';result['instance']=INSTANCE_ID;return self.send_json(result)
+            result=updater.status(ROOT,DATA);result['supervised']=os.environ.get('FORAGE_LAUNCHER')=='1';result['instance']=INSTANCE_ID;result['version_switch_supported']=os.environ.get('FORAGE_VERSION_SWITCH')=='1';return self.send_json(result)
+        if path=='/api/updates/history':
+            try:return self.send_json(updater.release_history(ROOT,DATA))
+            except Exception as exc:return self.send_json({'error':str(exc)},400)
         if path=='/api/state':
             with LOCK: state=read_state()
             state.pop('transient',None); return self.send_json({'state':state,'token':TOKEN})
@@ -510,12 +513,18 @@ class Handler(BaseHTTPRequestHandler):
                     with updater.UPDATE_LOCK:result=updater.configure(DATA,str(payload.get('repository','')),payload.get('check_on_start',True))
                 elif action=='check':
                     with updater.UPDATE_LOCK:result=updater.check(ROOT,DATA)
-                elif action=='stage':result=updater.stage(ROOT,DATA)
+                elif action=='stage':
+                    target=payload.get('version')
+                    if target is not None and os.environ.get('FORAGE_VERSION_SWITCH')!='1':raise ValueError('Close Forage and reopen Start-Forage.bat once to enable version switching in the new launcher.')
+                    result=updater.stage(ROOT,DATA,target)
                 elif action in ['restart','rollback']:
                     if os.environ.get('FORAGE_LAUNCHER')!='1':raise ValueError('Close Forage and start it with Start-Forage.bat or launcher.py to enable update and restart.')
                     info=updater.status(ROOT,DATA)
                     if action=='restart' and not info['pending']:raise ValueError('Download and verify an update first.')
                     if action=='rollback' and not info['rollback_available']:raise ValueError('No application rollback is available.')
+                    if action=='rollback':
+                        if os.environ.get('FORAGE_VERSION_SWITCH')!='1':raise ValueError('Close Forage and reopen Start-Forage.bat once to enable compatibility-checked rollback.')
+                        with updater.UPDATE_LOCK:updater.preflight_rollback(DATA)
                     with REQUEST_LOCK:
                         if ACTIVE_WRITES!=1:raise ValueError('Another request is in progress. Wait for it to finish before restarting.')
                         UPDATE_EXIT=75 if action=='restart' else 76

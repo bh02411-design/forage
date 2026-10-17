@@ -63,3 +63,58 @@ Lifecycle tests cover installation, restart, manual rollback, failed-server reco
 New checked AI additions appear as card graphics beneath the reply. Inspect a card by clicking its artwork. Use **Find a swap** to ask for a cut, **Accept swap** to apply it, **Different cut** to keep the addition and request an alternative, or **Pass** to record your decision. You can also add an unswapped suggestion to Mainboard or save it to Considering. Proposed additions and cuts appear side by side; nothing is changed until you choose an action. Accepted swaps support Undo. Artwork uses resolved local card data and does not consume model context. Unresolved artwork shows a named placeholder; unranked search fallbacks appear as graphical **Collection matches**, with the same inspection and decision controls, rather than being presented as ranked recommendations.
 
 Pending suggestions are accessible through **Pending decisions** in the chat header. The count combines unresolved card choices, swaps and category plans without counting a card and its swap twice. The former On the table section has been removed, so analytics sit directly beneath the workspace.
+
+### Update history and version switching
+
+Open **Local AI & settings → Application updates → Update history & versions** to see release changes, your installed version and verified stable packages. After updating from 0.2.8 or earlier, close Forage and reopen **Start-Forage.bat** once to activate the new launcher.
+
+Selecting a version opens a review screen. Switching verifies the release hashes and workspace-format compatibility before changing application files, then saves previous application files and a SQLite workspace snapshot under `data/updates/backups/`. Application rollback also snapshots the current workspace under `data/updates/rollback-snapshots/`. Your live workspace is preserved; a version switch does not restore old deck data. Future releases must explicitly declare supported workspace formats. Known releases 0.2.0–0.2.8 use workspace format 1. An older release restores its earlier interface; its Application updates screen can install the latest release again.
+
+History uses published releases from your configured GitHub repository. Cached history and bundled notes remain readable when GitHub is unavailable; downloading another release still requires connectivity. Keep using a repository you trust.
+
+### Changelog
+
+**0.2.9**
+
+- Add Update history with readable changes, installed-version labels and stable-release selection.
+- Check workspace compatibility and create a workspace snapshot before switching or rolling back.
+
+**0.2.8**
+
+- Move pending card choices, swaps and category plans into the chat header.
+- Remove the duplicate On the table section and bring analytics up.
+
+**0.2.7**
+
+- Display unranked collection-search fallbacks as graphical card options with decision controls.
+
+**0.2.6**
+
+- Display checked recommendations and proposed cuts as cards inside the conversation.
+- Add inspection, Considering, swap acceptance, different-cut requests and passing.
+
+**0.2.5**
+
+- Reduce repeated card metadata in AI prompts while preserving conversation context.
+- Honor explicit mana-value ranges in collection searches.
+
+**0.2.4**
+
+- Open conversations at the latest reply and preserve your position when reading older messages.
+
+**0.2.3**
+
+- Keep commanders at the top left across grouping and sorting modes.
+
+**0.2.2**
+
+- Move card quantities to the top left and widen the gap between deck and chat.
+
+**0.2.1**
+
+- Earlier updater release; see its GitHub release notes for details.
+
+**0.2.0**
+
+- Introduce supervised GitHub release installation, application backups and startup recovery.
+

@@ -9,6 +9,79 @@ PROGRAM_FILES=ROOT_FILES|STATIC_FILES
 MAX_PACKAGE=20*1024*1024
 
 
+# Release notes stay in an existing updater file so older installers accept the package.
+CHANGELOG={
+ '0.2.9':['Add Update history with readable changes, installed-version labels and stable-release selection.','Check workspace compatibility and create a workspace snapshot before switching or rolling back.'],
+ '0.2.8':['Move pending card choices, swaps and category plans into the chat header.','Remove the duplicate On the table section and bring analytics up.'],
+ '0.2.7':['Display unranked collection-search fallbacks as graphical card options with decision controls.'],
+ '0.2.6':['Display checked recommendations and proposed cuts as cards inside the conversation.','Add inspection, Considering, swap acceptance, different-cut requests and passing.'],
+ '0.2.5':['Reduce repeated card metadata in AI prompts while preserving conversation context.','Honor explicit mana-value ranges in collection searches.'],
+ '0.2.4':['Open conversations at the latest reply and preserve your position when reading older messages.'],
+ '0.2.3':['Keep commanders at the top left across grouping and sorting modes.'],
+ '0.2.2':['Move card quantities to the top left and widen the gap between deck and chat.'],
+ '0.2.1':['Earlier updater release; see its GitHub release notes for details.'],
+ '0.2.0':['Introduce supervised GitHub release installation, application backups and startup recovery.']
+}
+DEFAULT_REPOSITORY='bh02411-design/forage'
+
+def workspace_version(data):
+    path=Path(data)/'forage.sqlite3'
+    if not path.exists():return 1
+    with sqlite3.connect(path) as con:
+        if not con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='workspace'").fetchone():return 1
+        row=con.execute('SELECT payload FROM workspace WHERE id=1').fetchone()
+    value=json.loads(row[0]).get('version') if row else 1
+    if type(value) is not int:raise ValueError('Workspace format is unknown; version switching is blocked.')
+    return value
+
+def check_compatibility(metadata,data):
+    supported=metadata.get('workspace_versions')
+    # These released versions share the original workspace format. Future releases must declare support.
+    if supported is None and (0,2,0)<=version(metadata.get('version',''))<=(0,2,8):supported=[1]
+    if not isinstance(supported,list) or not supported or any(type(v) is not int or v<1 for v in supported):raise ValueError('This release does not declare a supported workspace format.')
+    if workspace_version(data) not in supported:raise ValueError('This release is incompatible with your current workspace. No application files or deck data were changed.')
+
+def snapshot_workspace(data,folder):
+    folder=Path(folder);folder.mkdir(parents=True,exist_ok=True)
+    if (Path(data)/'forage.sqlite3').exists():
+        with sqlite3.connect(Path(data)/'forage.sqlite3') as source,sqlite3.connect(folder/'workspace.sqlite3') as dest:source.backup(dest)
+
+def release_details(root,repo,release):
+    tag=release['tag_name'];remote=version(tag);local=version(current_version(root))
+    if release.get('draft') or release.get('prerelease'):raise ValueError('Only stable published releases are supported.')
+    asset=next((a for a in release.get('assets',[]) if a.get('name')=='Forage-update.zip'),None)
+    if not asset:raise ValueError('Release is missing Forage-update.zip.')
+    digest=asset.get('digest','')
+    if not re.fullmatch(r'sha256:[a-fA-F0-9]{64}',digest):raise ValueError('GitHub has not supplied a SHA-256 digest for the update asset.')
+    url=asset.get('browser_download_url','');u=urllib.parse.urlsplit(url)
+    if u.scheme!='https' or u.netloc!='github.com' or u.path!='/'+repo+'/releases/download/'+tag+'/Forage-update.zip' or u.query or u.fragment:raise ValueError('Release asset does not belong to the configured repository and tag.')
+    return {'status':'available' if remote>local else 'up_to_date','version':tag.lstrip('v'),'repository':repo,'url':url,'sha256':digest.split(':')[1].lower(),'notes':str(release.get('body') or '')[:4000]}
+
+def release_history(root,data):
+    repo=config(data)['repository'];error=None;releases=[]
+    cache=Path(data)/'updates'/'release-history.json'
+    if repo:
+        try:
+            raw=json.loads(fetch('https://api.github.com/repos/'+repository(repo)+'/releases?per_page=100',2*1024*1024))
+            if not isinstance(raw,list):raise ValueError('Unexpected release list.')
+            for release in raw:
+                try:releases.append(release_details(root,repo,release))
+                except (ValueError,KeyError,TypeError):continue
+            write_json(cache,{'repository':repo,'releases':releases})
+        except Exception as exc:
+            error=str(exc)[:300];cached=read_json(cache,{})
+            if cached.get('repository')==repo:releases=cached.get('releases',[])
+    by_version={row['version']:row for row in releases}
+    if repo==DEFAULT_REPOSITORY:
+        for number,notes in CHANGELOG.items():
+            by_version.setdefault(number,{'version':number,'repository':repo,'notes':'','available':False})['changes']=notes
+    installed=current_version(root);by_version.setdefault(installed,{'version':installed,'notes':'Installed locally.','available':False})
+    for number,row in by_version.items():
+        row['installed']=version(number)==version(installed)
+        row['available']=bool(row.get('url') and row.get('sha256')) and not row['installed']
+        row['direction']='older' if version(number)<version(installed) else 'newer'
+    return {'current_version':installed,'releases':sorted(by_version.values(),key=lambda row:version(row['version']),reverse=True),'offline_error':error,'workspace_version':workspace_version(data)}
+
 def version(value):
     if not isinstance(value,str) or not re.fullmatch(r'v?\d+\.\d+\.\d+',value):raise ValueError('Use a stable version such as 0.2.0.')
     return tuple(map(int,value.lstrip('v').split('.')))
@@ -41,7 +114,7 @@ def configure(data,repo,check_on_start=True):
 def status(root,data):
     pending=read_json(Path(data)/'updates'/'pending.json')
     tx=read_json(Path(data)/'updates'/'transaction.json')
-    return {'current_version':current_version(root),'config':config(data),'last_check':read_json(Path(data)/'updates'/'status.json',{'status':'not_checked'}),'pending':pending and {'version':pending['version']},'rollback_available':bool(tx and tx.get('status')=='installed'),'launcher_required':True}
+    return {'current_version':current_version(root),'config':config(data),'last_check':read_json(Path(data)/'updates'/'status.json',{'status':'not_checked'}),'pending':pending and {'version':pending['version']},'rollback_available':bool(tx and tx.get('status')=='installed'),'rollback_version':tx.get('from_version') if tx else None,'launcher_required':True}
 
 class ReleaseRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self,req,fp,code,msg,headers,newurl):
@@ -61,16 +134,7 @@ def check(root,data):
     if not repo:return {'status':'not_configured','message':'Set a release repository in Updates.'}
     try:
         release=json.loads(fetch('https://api.github.com/repos/'+repository(repo)+'/releases/latest',1024*1024))
-        tag=release['tag_name'];remote=version(tag);local=version(current_version(root))
-        if release.get('draft') or release.get('prerelease'):raise ValueError('Only stable published releases are supported.')
-        asset=next((a for a in release.get('assets',[]) if a.get('name')=='Forage-update.zip'),None)
-        if not asset:raise ValueError('Release is missing Forage-update.zip.')
-        digest=asset.get('digest','')
-        if not re.fullmatch(r'sha256:[a-fA-F0-9]{64}',digest):raise ValueError('GitHub has not supplied a SHA-256 digest for the update asset.')
-        url=asset.get('browser_download_url','');u=urllib.parse.urlsplit(url)
-        expected='/'+repo+'/releases/download/'+tag+'/Forage-update.zip'
-        if u.scheme!='https' or u.netloc!='github.com' or u.path!=expected or u.query or u.fragment:raise ValueError('Release asset does not belong to the configured repository and tag.')
-        result={'status':'available' if remote>local else 'up_to_date','version':tag.lstrip('v'),'repository':repo,'url':url,'sha256':digest.split(':')[1].lower(),'notes':str(release.get('body') or '')[:4000]}
+        result=release_details(root,repo,release)
     except Exception as exc:result={'status':'error','message':str(exc)[:500]}
     result['checked_at']=datetime.datetime.now(datetime.timezone.utc).isoformat()
     write_json(Path(data)/'updates'/'status.json',result)
@@ -99,17 +163,24 @@ def verify_package(archive,expected_version):
             if name.endswith('.py'):compile(z.read(name),name,'exec')
         return manifest
 
-def stage(root,data):
+def stage(root,data,target=None):
     with UPDATE_LOCK:
-        found=check(root,data)
-        if found.get('status')!='available':raise ValueError(found.get('message','No newer stable update is available.'))
+        if target is not None:
+            target='.'.join(map(str,version(target)));repo=repository(config(data)['repository'])
+            if version(target)==version(current_version(root)):raise ValueError('This version is already installed.')
+            release=json.loads(fetch('https://api.github.com/repos/'+repo+'/releases/tags/v'+target,1024*1024))
+            found=release_details(root,repo,release)
+            if version(found['version'])!=version(target):raise ValueError('Requested release tag mismatch.')
+        else:found=check(root,data)
+        if target is None and found.get('status')!='available':raise ValueError(found.get('message','No newer stable update is available.'))
         folder=Path(data)/'updates';folder.mkdir(parents=True,exist_ok=True)
         payload=fetch(found['url'],MAX_PACKAGE)
         if hashlib.sha256(payload).hexdigest()!=found['sha256']:raise ValueError('Downloaded update failed the GitHub SHA-256 check.')
         archive=folder/'candidate.zip';archive.write_bytes(payload)
         verify_package(archive,found['version'])
+        with zipfile.ZipFile(archive) as z:check_compatibility(json.loads(z.read('version.json')),data)
         os.replace(archive,folder/'pending.zip')
-        write_json(folder/'pending.json',{'version':found['version'],'sha256':found['sha256'],'repository':found['repository']})
+        write_json(folder/'pending.json',{'version':found['version'],'sha256':found['sha256'],'repository':found['repository'],'operation':'switch' if target else 'update','from_version':current_version(root)})
         return {'version':found['version'],'status':'ready'}
 
 def replace_bytes(path,payload):
@@ -123,11 +194,18 @@ def recover(root,data):
     tx=read_json(Path(data)/'updates'/'transaction.json')
     if tx and tx.get('status') in ['installing','rolling_back']:rollback(root,data,allow_interrupted=True)
 
+def preflight_rollback(data):
+    data=Path(data);tx=read_json(data/'updates'/'transaction.json')
+    if not tx or tx.get('status')!='installed':raise ValueError('No application rollback is available.')
+    check_compatibility(read_json(data/'updates'/'backups'/tx['backup']/'program'/'version.json',{}),data)
+
 def rollback(root,data,allow_interrupted=False):
     with UPDATE_LOCK:
         root=Path(root);data=Path(data);txfile=data/'updates'/'transaction.json';tx=read_json(txfile)
         if not tx or tx.get('status') not in (['installed','installing','rolling_back'] if allow_interrupted else ['installed']):raise ValueError('No application rollback is available.')
         folder=data/'updates'/'backups'/tx['backup']
+        check_compatibility(read_json(folder/'program'/'version.json',{}),data)
+        snapshot_workspace(data,data/'updates'/'rollback-snapshots'/datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ'))
         tx['status']='rolling_back';write_json(txfile,tx)
         for name,existed in tx['files'].items():
             if name not in PROGRAM_FILES:raise ValueError('Invalid rollback file.')
@@ -144,8 +222,11 @@ def install_pending(root,data):
         if not pending:raise ValueError('No staged update.')
         archive=folder/'pending.zip'
         if hashlib.sha256(archive.read_bytes()).hexdigest()!=pending['sha256']:raise ValueError('Staged update changed since verification.')
-        if version(pending['version'])<=version(current_version(root)):raise ValueError('Staged update is not newer than this installation.')
+        if pending.get('operation')=='switch':
+            if pending.get('from_version')!=current_version(root):raise ValueError('Installed version changed after staging. Select the release again.')
+        elif version(pending['version'])<=version(current_version(root)):raise ValueError('Staged update is not newer than this installation.')
         manifest=verify_package(archive,pending['version'])
+        with zipfile.ZipFile(archive) as z:check_compatibility(json.loads(z.read('version.json')),data)
         ident=datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
         backup=folder/'backups'/ident;backup.mkdir(parents=True)
         before={}
@@ -155,8 +236,7 @@ def install_pending(root,data):
             before[name]=source.exists()
             if source.exists():
                 dest=backup/'program'/name;dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(source,dest)
-        if (data/'forage.sqlite3').exists():
-            with sqlite3.connect(data/'forage.sqlite3') as source,sqlite3.connect(backup/'workspace.sqlite3') as dest:source.backup(dest)
+        snapshot_workspace(data,backup)
         tx={'status':'installing','backup':ident,'files':before,'from_version':current_version(root),'to_version':pending['version']}
         write_json(folder/'transaction.json',tx)
         try:

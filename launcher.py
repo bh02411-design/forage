@@ -25,7 +25,7 @@ def main():
     while True:
         cmd=[sys.executable,str(ROOT/'server.py'),'--port',str(args.port)]
         if args.open and first:cmd.append('--open')
-        env=dict(os.environ,FORAGE_LAUNCHER='1')
+        env=dict(os.environ,FORAGE_LAUNCHER='1',FORAGE_VERSION_SWITCH='1')
         process=subprocess.Popen(cmd,cwd=ROOT,env=env);first=False
         try:
             if verify_start and not healthy(process,args.port,updater.current_version(ROOT)):

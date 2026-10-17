@@ -110,3 +110,10 @@
 #pending-decisions.has-pending{color:var(--green,#c8e7b2);border-color:#6d865b}
 .pending-decisions-list .proposal-card{margin-bottom:12px}
 .pending-decisions-list .recommendation-pair>div{max-width:220px}
+
+.release-entry{padding:16px 0;border-bottom:1px solid var(--line);font-size:12px;line-height:1.7}
+.release-heading{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.release-heading h3{margin:0;font-size:15px}
+.release-installed{color:var(--green,#c8e7b2);border:1px solid #6d865b;padding:3px 8px;border-radius:20px;font-size:10px}
+.release-entry ul{padding-left:20px}
+#history-updates-back{margin-top:20px}

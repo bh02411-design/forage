@@ -35,7 +35,16 @@ jobs:
       - run: node tests/test_cards.cjs
       - run: node tests/test_render.cjs
       - run: python build_release.py --output dist/Forage-update.zip
+      - name: Write readable release notes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import updater
+          number = updater.current_version('.')
+          notes = updater.CHANGELOG.get(number, ['Application maintenance update.'])
+          Path('dist/release-notes.md').write_text('\n'.join('- ' + note for note in notes) + '\n', encoding='utf-8')
+          PY
       - name: Publish release asset
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$RELEASE_TAG" dist/Forage-update.zip --target "$GITHUB_SHA" --generate-notes
+        run: gh release create "$RELEASE_TAG" dist/Forage-update.zip --target "$GITHUB_SHA" --notes-file dist/release-notes.md
