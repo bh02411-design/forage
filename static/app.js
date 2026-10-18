@@ -22,7 +22,7 @@ if(!['stacks','grid','list'].includes(cardMode))cardMode='stacks';
 if(!['category','type','mana','color'].includes(groupBy))groupBy='category';
 if(!['name','mana'].includes(sortBy))sortBy='name';
 const deck=()=>state.decks.find(d=>d.id===state.active);
-const mainCards=()=>deck().cards.filter(c=>['main','commander'].includes(c.zone));
+const mainCards=()=>ForageCards.countedBoardCards(deck(),'main');
 const safeUrl=s=>{try{const u=new URL(s);return u.protocol==='https:'?u.href:''}catch{return ''}};
 function toast(text){$('#toast').textContent=text;$('#toast').hidden=false;clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('#toast').hidden=true,5000)}
 async function api(path,payload){const options=payload===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json','X-Forage-Token':token},body:JSON.stringify(payload)};const r=await fetch('/api/'+path,options);let data;try{data=await r.json()}catch{throw Error('Server unavailable. Open Forage from the tray or Start menu, or restart its launcher.')}if(!r.ok)throw Error(data.error||'Request failed');return data}
@@ -54,7 +54,7 @@ function render(){
 }
 function renderManaStats(){
  const include=uiRead('manaProductionNonlands','yes')==='yes';$('#mana-nonland').checked=include;
- const stats=ForageCards.manaStats(deck().cards,include),names={W:'White',U:'Blue',B:'Black',R:'Red',G:'Green',C:'Colorless'};
+ const stats=ForageCards.manaStats(ForageCards.countedBoardCards(deck(),'main'),include),names={W:'White',U:'Blue',B:'Black',R:'Red',G:'Green',C:'Colorless'};
  const commanders=deck().cards.filter(c=>c.zone==='commander');
  if(commanders.length&&commanders.every(c=>Array.isArray(c.color_identity))){
   const identity=new Set(commanders.flatMap(c=>c.color_identity));
@@ -84,7 +84,7 @@ function renderDeck(){
  const result=ForageCards.search(board,filter),visible=new Set(result.matches.map(c=>c.id));
  const cards=board.filter(c=>c.zone==='commander'||visible.has(c.id));
  filterStatus('deck',result,filter,zone==='main'&&board.some(c=>c.zone==='commander'&&!visible.has(c.id)));
- $('#card-count').textContent=cards.filter(c=>ForageCards.onBoard(c,zone)).reduce((a,c)=>a+c.qty,0)+' cards';
+ $('#card-count').textContent=ForageCards.countedBoardCards(deck(),zone).filter(c=>c.zone==='commander'||visible.has(c.id)).reduce((a,c)=>a+c.qty,0)+' cards';
  const arranged=ForageCards.boardGroups(cards,groupBy,sortBy,deck()),entries=arranged.main;
  const swapPanel=$('#swap-categories');swapPanel.hidden=false;swapPanel.className='swap-categories mode-'+cardMode;
  $('#deck-list').className='deck-list card-board mode-'+cardMode;
@@ -94,7 +94,7 @@ function renderDeck(){
   return `<section class="visual-group${pinned?' commander-group':''}" ${pinned?'data-pinned-commander="true"':`data-drop-group="${esc(g)}"`}><div class="group-label">${heading}<span>${list.reduce((n,c)=>n+c.qty,0)}</span></div><div class="group-cards">`+list.map(c=>{const markup=cardMode==='list'?`<button class="card-row" draggable="true" data-visual-card="${esc(c.id)}" data-card-source="deck"><span class="qty">${c.qty}</span><span class="card-name">${esc(c.name)}</span>${c.protected?'<span class="lock" title="Protected card">◆</span>':''}<span class="card-mv">${c.land?'◇':c.mv??'?'}</span></button>`:ForageCards.tile(c,state.collection);return swap?`<div class="swap-card-entry"><span class="swap-origin">${c.zone==='maybe'?'Considering':'Mainboard'}</span>${markup}</div>`:markup}).join('')+'</div></section>';
  };
  $('#deck-list').innerHTML=entries.map(entry=>groupMarkup(entry)).join('')||'<div class="empty">Nothing here yet.<br>Import a list or drop a card.</div>';
- swapPanel.innerHTML='<div class="swap-panel-heading">SHARED CATEGORIES</div>'+arranged.swaps.map(entry=>groupMarkup(entry,true)).join('');
+ swapPanel.innerHTML='<div class="swap-panel-heading">SHARED CATEGORIES · EXCLUDED FROM BOARD TOTALS</div>'+arranged.swaps.map(entry=>groupMarkup(entry,true)).join('');
  $$('[data-card-mode]').forEach(b=>{b.classList.toggle('selected',b.dataset.cardMode===cardMode);b.setAttribute('aria-pressed',String(b.dataset.cardMode===cardMode))});
  $('#group-cards').value=groupBy;$('#sort-cards').value=sortBy;
  if(cardMode==='stacks')$('#deck-list').innerHTML='<div class="stack-columns">'+$('#deck-list').innerHTML+'</div>';

@@ -54,7 +54,8 @@ def make_entry(name,qty,group='main'):
     return {'id':uid(),'name':name,'qty':qty,'zone':zone,'group':'Land' if land else group if g not in ['main','mainboard'] else 'Uncategorized','roles':['Land'] if land else [],'land':land,'mv':0 if land else None,'mdfc':False,'protected':False,'meta_source':'Imported name; metadata not resolved'}
 
 def analysis(deck):
-    cards=[c for c in deck['cards'] if c['zone'] in ['main','commander']]
+    staging=set(swap_category_names(deck).values())
+    cards=[c for c in deck['cards'] if c['zone']=='commander' or c['zone']=='main' and c.get('group') not in staging]
     total=sum(c['qty'] for c in cards); lands=sum(c['qty'] for c in cards if c.get('land'))
     mdfc=sum(c['qty'] for c in cards if c.get('mdfc') and not c.get('land'))
     nonland=[c for c in cards if not c.get('land')]

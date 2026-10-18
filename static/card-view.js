@@ -21,6 +21,10 @@ function groups(cards,by='category',sort='name'){
 }
 function swapCategoryNames(deck){return {in:deck.swap_categories?.in||'Swap In',out:deck.swap_categories?.out||'Swap Out'}}
 function onBoard(card,zone){return zone==='main'?['main','commander'].includes(card.zone):card.zone==='maybe'}
+function countedBoardCards(deck,zone){
+ const shared=Object.values(swapCategoryNames(deck));
+ return (deck.cards||[]).filter(c=>onBoard(c,zone)&&(c.zone==='commander'||!shared.includes(c.group)));
+}
 function boardCards(deck,zone){
  const shared=Object.values(swapCategoryNames(deck));
  return (deck.cards||[]).filter(c=>onBoard(c,zone)||(['main','maybe'].includes(c.zone)&&shared.includes(c.group)));
@@ -189,5 +193,5 @@ function sortCollection(cards,by='name',direction='asc',counts=new Map()){
   return result*sign||collator.compare(a.card.name,b.card.name);
  }).map(row=>row.card);
 }
-const api={manaStats,groups,onBoard,boardCards,boardGroups,swapCategoryNames,art,tile,groupName,recommendation,pendingDecisions,search,compileSearch,inventory,sortCollection};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.ForageCards=api;
+const api={manaStats,groups,onBoard,countedBoardCards,boardCards,boardGroups,swapCategoryNames,art,tile,groupName,recommendation,pendingDecisions,search,compileSearch,inventory,sortCollection};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.ForageCards=api;
 })(typeof window!=='undefined'?window:globalThis);

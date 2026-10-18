@@ -74,6 +74,11 @@ History uses published releases from your configured GitHub repository. Cached h
 
 ### Changelog
 
+**0.2.28**
+
+- Exclude Swap In and Swap Out cards from Mainboard and Considering totals, including renamed swap categories. Keep each staging category’s own count visible.
+- Use the unstaged mainboard plus commander for deck size, curve, roles and mana comparison statistics. Returning a card to an ordinary category counts it again.
+
 **0.2.27**
 
 - Collapse the desktop sidebar to an icon rail with the arrow button; expand it again at any time. Your preference is remembered on this browser.

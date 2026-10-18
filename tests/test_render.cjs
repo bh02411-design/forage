@@ -137,6 +137,7 @@ console.log('8 pending-decision header/layout checks passed.');
  const ctx={ForageCards:require('../static/card-view.js'),deck:()=>({cards}),$:s=>nodes[s]??=( {} ),$$:()=>[],uiRead:(k,f)=>f,uiSave:()=>{},esc:s=>String(s)};
  vm.createContext(ctx);vm.runInContext(app.slice(app.indexOf('function renderManaStats('),app.indexOf('function filterStatus(')),ctx);ctx.renderManaStats();
  assert.doesNotMatch(nodes['#mana-stats'].innerHTML,/mana-color-card.*?<strong>White<\/strong>/);assert.doesNotMatch(nodes['#mana-stats'].innerHTML,/<strong>Blue<\/strong>|<strong>Red<\/strong>|<strong>Colorless<\/strong>/);assert.match(nodes['#mana-stats'].innerHTML,/<strong>Black<\/strong>/);assert.match(nodes['#mana-stats'].innerHTML,/<strong>Green<\/strong>/);
+ cards.push({name:'Staged red',qty:4,zone:'main',group:'Swap In',mana_cost:'{R}',mv:1});ctx.renderManaStats();assert.doesNotMatch(nodes['#mana-stats'].innerHTML,/<strong>Red<\/strong>/);
  cards.push({name:'Partner',qty:1,zone:'commander',mana_cost:'{W}',mv:1,color_identity:['W'],type_line:'Creature'});ctx.renderManaStats();assert.match(nodes['#mana-stats'].innerHTML,/<strong>White<\/strong>/);
  cards.push({name:'Wastes',qty:1,zone:'main',land:true});ctx.renderManaStats();assert.match(nodes['#mana-stats'].innerHTML,/<strong>Colorless<\/strong>/);
  delete cards[0].color_identity;ctx.renderManaStats();assert.match(nodes['#mana-stats'].innerHTML,/<strong>Blue<\/strong>/);

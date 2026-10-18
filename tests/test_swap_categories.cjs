@@ -19,8 +19,8 @@ const elements={};const el=s=>elements[s]??=( {value:'',hidden:false,innerHTML:'
 const context={ForageCards:Cards,state:{collection:[]},deck:()=>({cards,categories:['a_Likely Add','Empty import artifact']}),zone:'main',cardMode:'stacks',groupBy:'mana',sortBy:'name',esc:s=>String(s),$:el,$$:()=>[],filterStatus:()=>{},bindVisualCards:e=>bindings.push(e)};
 vm.createContext(context);const app=fs.readFileSync('static/app.js','utf8');vm.runInContext(app.slice(app.indexOf('function renderDeck(){'),app.indexOf('function findVisualCard(')),context);
 context.renderDeck();assert.equal(el('#swap-categories').hidden,false);assert.match(el('#swap-categories').innerHTML,/data-edit-category="Swap In"/);assert.match(el('#swap-categories').innerHTML,/data-drop-group="Swap Out"/);assert.equal(bindings.length,2);assert.doesNotMatch(el('#deck-list').innerHTML,/a_Likely Add|Empty import artifact|Incoming|Outgoing/);
-context.zone='maybe';context.renderDeck();assert.equal(el('#swap-categories').hidden,false);assert.match(el('#swap-categories').innerHTML,/Considering Incoming/);assert.match(el('#swap-categories').innerHTML,/Mainboard/);assert.match(el('#swap-categories').innerHTML,/Considering/);assert.equal(el('#card-count').textContent,'3 cards');
-context.zone='main';context.groupBy='category';context.renderDeck();assert.doesNotMatch(el('#deck-list').innerHTML,/a_Likely Add|Empty import artifact/);assert.equal(el('#card-count').textContent,'5 cards');
+context.zone='maybe';context.renderDeck();assert.equal(el('#swap-categories').hidden,false);assert.match(el('#swap-categories').innerHTML,/Considering Incoming/);assert.match(el('#swap-categories').innerHTML,/Mainboard/);assert.match(el('#swap-categories').innerHTML,/Considering/);assert.equal(el('#card-count').textContent,'0 cards');
+context.zone='main';context.groupBy='category';context.renderDeck();assert.doesNotMatch(el('#deck-list').innerHTML,/a_Likely Add|Empty import artifact/);assert.equal(el('#card-count').textContent,'2 cards');
 const html=fs.readFileSync('static/index.html','utf8'),css=fs.readFileSync('static/style.css','utf8');assert.match(html,/class="deck-surface"/);assert.match(css,/\.deck-surface\{display:grid;grid-template-columns:minmax\(0,1fr\)/);
 console.log('Pinned swap category grouping and rendering checks passed');
 
@@ -35,3 +35,15 @@ console.log('Pinned swap category grouping and rendering checks passed');
  await assert.rejects(()=>ctx.internalDrop({deck:'deck',id:'c',source:'deck'},'main','Swap Out'),/commander stays pinned/);
  console.log('Shared swap categories preserve assignments and board counts.');
 })().catch(error=>{console.error(error);process.exitCode=1});
+
+// Staging is visible on both boards but never included in board totals.
+assert.deepEqual(Cards.countedBoardCards({cards},'main').map(c=>c.id),['c','a']);
+assert.deepEqual(Cards.countedBoardCards({cards},'maybe'),[]);
+const renamed={cards:[{...cards[2],group:'Incoming picks'},{id:'regular',zone:'maybe',qty:4,group:'Draw'}],swap_categories:{in:'Incoming picks',out:'Outgoing picks'}};
+assert.deepEqual(Cards.countedBoardCards(renamed,'main'),[]);
+assert.equal(Cards.countedBoardCards(renamed,'maybe')[0].qty,4);
+renamed.cards[0].group='Draw';
+assert.equal(Cards.countedBoardCards(renamed,'main')[0].qty,2);
+renamed.cards[0].group='Incoming picks';
+assert.deepEqual(Cards.countedBoardCards(renamed,'main'),[]);
+console.log('Staging totals exclude both pins, support renamed categories and update on moves.');

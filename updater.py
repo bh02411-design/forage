@@ -11,6 +11,7 @@ MAX_PACKAGE=20*1024*1024
 
 # Release notes stay in an existing updater file so older installers accept the package.
 CHANGELOG={
+ '0.2.28':['Exclude shared Swap In and Swap Out categories from both board totals, including renamed categories.','Keep staging counts visible and align deck size, curve, roles and mana statistics with the unstaged mainboard.'],
  '0.2.27':['Add a collapsible desktop sidebar with accessible icon navigation and a remembered preference.','Keep the full horizontal navigation available on smaller screens.'],
  '0.2.26':['Show only commander-identity colors in mana comparison statistics, including combined partner identities.','Show colorless when relevant and let visible color cards fill the available width.'],
  '0.2.25':['Move Mana cost vs production above the mana curve and role panels.'],

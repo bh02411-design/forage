@@ -186,7 +186,7 @@ class HttpTests(unittest.TestCase):
         count=core.analysis(d)['total'];collection=copy.deepcopy(state['collection'])
         self.assertEqual(core.swap_category_names(d),{'in':'Swap In','out':'Swap Out'})
         with self.request('/api/category',{'deck':d['id'],'changes':[{'action':'move','cards':[card['name']],'to':'Swap Out'}]}) as response:json.load(response)
-        after=server.read_state();self.assertEqual(after['decks'][0]['cards'][-1]['group'],'Swap Out');self.assertEqual(core.analysis(after['decks'][0])['total'],count);self.assertEqual(after['collection'],collection)
+        after=server.read_state();self.assertEqual(after['decks'][0]['cards'][-1]['group'],'Swap Out');self.assertEqual(core.analysis(after['decks'][0])['total'],count-card['qty']);self.assertEqual(after['collection'],collection)
         with self.request('/api/category',{'deck':d['id'],'changes':[{'action':'rename','from':'Swap Out','to':'Likely Cuts'}]}) as response:json.load(response)
         after=server.read_state()['decks'][0];self.assertEqual(after['swap_categories']['out'],'Likely Cuts');self.assertNotIn('Swap Out',core.category_names(after));self.assertEqual(after['cards'][-1]['group'],'Likely Cuts')
         with self.request('/api/cards-remove',{'deck':d['id'],'ids':[card['id']],'category':'Likely Cuts'}) as response:json.load(response)
