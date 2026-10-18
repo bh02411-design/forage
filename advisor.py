@@ -78,10 +78,52 @@ def evidence(card,state,deck):
             'color_check':'unknown' if ci is None or colors is None else 'legal' if set(ci)<=colors else 'outside identity',
             'draw_review':draw_profile(card)}
 
-def wants_draw_advice(message):
-    return bool(re.search(r'\bdraw\b',message,re.I) and re.search(r'\b(help|recommend|efficient|reliable|find|add|options)\b',message,re.I))
+def cut_request(message):
+    """Resolve explicit removal requests before matching desired replacement abilities."""
+    text=message.lower().replace('’',"'")
+    if re.search(r'\b(?:recommend|suggest|give|list|find)(?:\s+\w+){0,5}\s+swaps?\b|\bcuts?\s+and\s+(?:additions?|replacements?)\b',text):return None
+    patterns=[r'\bcards?\s+(?:you\s+would\s+recommend\s+)?(?:swapping out|cutting|removing)\b',r'\bcards?\s+(?:(?:you|i|we)\s+(?:should|could|can)\s+)?to\s+(?:cut|remove|swap out)\b',
+              r'\b(?:what|which)(?:\s+\w+){0,4}\s+(?:should|could|can|would)\s+(?:i|we|you)\s+(?:cut|remove|replace)\b',
+              r'\b(?:recommend|suggest|find|give|list|identify)(?:\s+\w+){0,6}\s+cuts?\b',
+              r'\b(?:cut|remove)\s+(?:me\s+)?(?:[1-9][0-9]?|one|two|three|four|five|six|seven|eight|nine|ten)\s+cards?\b']
+    if not any(re.search(p,text) for p in patterns):return None
+    if re.search(r"\b(?:do not|don't|without)\s+(?:cut|remove|cutting|removing)\b",text):return None
+    words={'one':1,'two':2,'three':3,'four':4,'five':5,'six':6,'seven':7,'eight':8,'nine':9,'ten':10}
+    match=re.search(r'\b([1-9][0-9]?|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:cards?|cuts?)\b',text)
+    count=(int(match[1]) if match[1].isdigit() else words[match[1]]) if match else None
+    return {'task':'cuts','board':'main','count':count,'instruction':'Recommend removal candidates from the current MAINBOARD only. The desired draw/ramp/etc. describes why space is needed, not a request for collection additions. Do not search for additions. Return cuts: [{"name":"exact mainboard name","reason":"tradeoff and why expendable"}]. Exclude commanders, Considering and protected cards. Use the requested count; if evidence prevents that count, provide cut_limitations explaining the shortfall. Do not execute removals.'}
 
-GUIDANCE='''Recommendation procedure: first identify the user's actual problem from the current request, recent corrections and saved preferences. Diagnose the existing mainboard across ALL categories; category labels are not exclusive roles. Search owned alternatives by Oracle abilities. Compare immediate return, net hand change including the spell spent, setup, additional/activation costs, commander independence, and recurrence. A cantrip creature replaces itself in hand when cast but leaves a body; reanimating it can add a card without spending a card from hand. Discard/draw is not automatically net card advantage. Cathartic Reunion-style additional discard costs are paid even if countered. Do not label all discard effects bad: graveyard setup matters. For Terra use her supplied Oracle text: power eligibility, combat connection and reanimation mana all matter; do not substitute mana value for power. Flashback is a preference for noncreatures, not a mandatory restriction unless the user says so. Explain the strongest few choices and real tradeoffs, not an exhaustive keyword list. Never recommend cards already in the active mainboard as additions. Flag unavailable copies and unknown metadata. Use exact supplied mana_cost, mv and power; if missing, state unknown, never fill from memory. Retrieval hints are heuristics, not authoritative rulings. Give a concise comparison including full costs and dependencies. Use markdown tables only when helpful. When recommending additions include a recommendations array [{"name":"exact owned name","mana_cost":"exact supplied cost or null","mv":2,"reason":"concrete benefit and dependencies"}]. This manifest is checked before displaying the response. Do not repeat every field or disclose internal reasoning. Before finalizing verify ownership, identity, existing membership, and any protected cut. For draw advice return at least one checked recommendation if the supplied evidence supports one, or explain the concrete data limitation. Suggest reusable preferences only from explicit user statements; save neither assistant guesses nor unverified rules as preferences.'''
+def check_cuts(deck,data,task):
+    issues=[];cuts=data.get('cuts');main={key(c['name']):c for c in deck['cards'] if c['zone']=='main'};seen=set()
+    if data.get('recommendations') or data.get('proposals'):issues.append('This request is for cuts only, not additions or swaps.')
+    if not isinstance(cuts,list):return issues+['Return a cuts array of mainboard removal candidates.']
+    requested=task.get('count');limited=isinstance(data.get('cut_limitations'),str) and bool(data['cut_limitations'].strip())
+    if requested is not None and (len(cuts)>requested or len(cuts)<requested and not limited):issues.append('Return '+str(requested)+' distinct cuts or explain the shortfall in cut_limitations.')
+    if not cuts and not data.get('cut_limitations'):issues.append('Provide cuts or explain missing evidence in cut_limitations.')
+    for item in cuts:
+        if not isinstance(item,dict) or not isinstance(item.get('name'),str):issues.append('Each cut needs an exact mainboard name and reason.');continue
+        k=key(item['name']);card=main.get(k)
+        if not card:issues.append(item['name']+': not in the current mainboard.')
+        elif card.get('protected'):issues.append(card['name']+': protected from cuts.')
+        if k in seen:issues.append(item['name']+': duplicate cut.')
+        seen.add(k)
+        if not isinstance(item.get('reason'),str) or not item['reason'].strip():issues.append(item['name']+': explain the removal tradeoff.')
+    return list(dict.fromkeys(issues))
+
+def cut_reply(deck,data):
+    main={key(c['name']):c for c in deck['cards'] if c['zone']=='main'}
+    def cell(value):return str(value).replace('|','\\|').replace('\n',' ').replace('\r',' ')
+    rows=[]
+    for item in data.get('cuts',[]):
+        c=main[key(item['name'])];rows.append('| '+cell(c['name'])+' | '+cell(c.get('mv') if c.get('mv') is not None else 'Unknown')+' | '+cell(item['reason'])+' |')
+    reply='Candidates to remove from your current mainboard:\n\n| Card | Mana value | Why consider cutting it |\n|---|---:|---|\n'+'\n'.join(rows) if rows else 'No removal candidates could be verified.'
+    if data.get('cut_limitations'):reply+='\n\n'+str(data['cut_limitations'])
+    return reply+'\n\nThese are suggestions; no cards have been removed.'
+
+def wants_draw_advice(message):
+    return not cut_request(message) and bool(re.search(r'\bdraw\b',message,re.I) and re.search(r'\b(help|recommend|efficient|reliable|find|add|options)\b',message,re.I))
+
+GUIDANCE='''Recommendation procedure: first identify the user's actual problem from the current request, recent corrections and saved preferences. Diagnose the existing mainboard across ALL categories; category labels are not exclusive roles. Search owned alternatives by Oracle abilities. Compare immediate return, net hand change including the spell spent, setup, additional/activation costs, commander independence, and recurrence. A cantrip creature replaces itself in hand when cast but leaves a body; reanimating it can add a card without spending a card from hand. Discard/draw is not automatically net card advantage. Cathartic Reunion-style additional discard costs are paid even if countered. Do not label all discard effects bad: graveyard setup matters. For Terra use her supplied Oracle text: power eligibility, combat connection and reanimation mana all matter; do not substitute mana value for power. Flashback is a preference for noncreatures, not a mandatory restriction unless the user says so. Explain the strongest few choices and real tradeoffs, not an exhaustive keyword list. Never recommend cards already in the active mainboard as additions. Flag unavailable copies and unknown metadata. Use exact supplied mana_cost, mv and power; if missing, state unknown, never fill from memory. Retrieval hints are heuristics, not authoritative rulings. Give a concise comparison including full costs and dependencies. Use markdown tables only when helpful. When recommending additions include a recommendations array [{"name":"exact owned name","mana_cost":"exact supplied cost or null","mv":2,"reason":"concrete benefit and dependencies"}]. This manifest is checked before displaying the response. Do not repeat every field or disclose internal reasoning. Before finalizing verify ownership, identity, existing membership, and any protected cut. For draw ADDITION advice (not removal/cut requests) return at least one checked recommendation if the supplied evidence supports one, or explain the concrete data limitation. Suggest reusable preferences only from explicit user statements; save neither assistant guesses nor unverified rules as preferences.'''
 
 def check_recommendations(state,deck,data):
     issues=[];known=catalog(state,deck);active={key(c['name']):c for c in deck['cards'] if c['zone'] in ['main','commander']}

@@ -76,9 +76,9 @@ class ResolvedPromptTests(unittest.TestCase):
         self.question='please give me 5 cards you would recommend swapping out for card draw'
         for i in range(90):
             c=copy.deepcopy(self.deck['cards'][1]);c.update(name='Large Considering '+str(i),zone='maybe');self.deck['cards'].append(c)
-        with patch.object(server,'request_json',return_value={'choices':[{'message':{'content':'{"reply":"Review the supplied mainboard.","proposals":[],"recommendation_limitations":"This test checks packing, not recommendations."}'}}]}) as model:
+        with patch.object(server,'request_json',return_value={'choices':[{'message':{'content':json.dumps({'reply':'Review the supplied mainboard.','cuts':[{'name':'Resolved Deck Card '+str(i),'reason':'Test removal tradeoff.'} for i in range(1,6)]})}}]}) as model:
             result=server.ai_chat(self.state,self.deck,self.question)
-        self.assertEqual(model.call_count,1);self.assertIn('Review',result['reply'])
+        self.assertEqual(model.call_count,1);self.assertIn('Candidates to remove',result['reply'])
         self.assertEqual(model.call_args.args[1]['messages'][-1]['content'],self.question)
     def test_range_filters_before_prompt(self):
         result=server.collection_search(self.state,self.deck,self.question)

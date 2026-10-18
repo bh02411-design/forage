@@ -74,6 +74,12 @@ History uses published releases from your configured GitHub repository. Cached h
 
 ### Changelog
 
+**0.2.19**
+
+- Distinguish requests for cuts from requests for additions, including cuts to make room for draw spells.
+- Scope cuts to Mainboard and check unique names, requested count and protection flags. Display verified names and mana values with model-provided tradeoffs.
+- On cut failures, explain the failure without substituting collection additions. Suggestions never remove cards automatically.
+
 **0.2.18**
 
 - Add compact roster rows for large Mainboard/Considering prompts, retaining all entries, mana values, roles, categories, quantities and protection flags.
