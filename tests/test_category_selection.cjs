@@ -1,0 +1,14 @@
+const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
+const source=fs.readFileSync('static/app.js','utf8');
+const cards=[{id:'a',name:'Same',qty:2,zone:'main',group:'Draw'},{id:'b',name:'Same',qty:1,zone:'maybe',group:'Draw'},{id:'c',name:'Locked',qty:1,zone:'main',group:'Draw',protected:true}];
+const elements={},checks=cards.map(c=>({value:c.id,checked:false}));let markup='',payload;
+const context={deck:()=>({cards}),esc:s=>String(s),modal:(_,html)=>{markup=html},$:s=>elements[s]??=( {} ),$$:s=>s.endsWith(':checked')?checks.filter(c=>c.checked):checks,allCategoryNames:()=>['Draw'],run:fn=>fn(),mutate:async(path,data)=>{payload={path,...data}},closeModal:()=>{},toast:()=>{}};
+vm.createContext(context);vm.runInContext(source.slice(source.indexOf('function categoryDialog(name){'),source.indexOf('function allCategoryNames()')),context);
+context.categoryDialog('Draw');
+assert.match(markup,/Mainboard/);assert.match(markup,/Considering/);assert.match(markup,/×2/);
+assert.equal(elements['#category-remove'].disabled,true);
+elements['#category-select-all'].onchange({target:{checked:true}});
+assert.ok(checks.every(c=>c.checked));assert.equal(elements['#category-select-all'].checked,true);assert.equal(elements['#category-remove'].disabled,true);
+checks[2].checked=false;checks[2].onchange();assert.equal(elements['#category-select-all'].indeterminate,true);assert.equal(elements['#category-remove'].disabled,false);
+checks[0].checked=false;checks[0].onchange();
+(async()=>{await elements['#category-remove'].onclick();assert.equal(payload.path,'cards-remove');assert.deepEqual(Array.from(payload.ids),['b']);assert.equal(payload.category,'Draw');await elements['#category-move'].onclick();assert.deepEqual(Array.from(payload.changes[0].ids),['b']);context.categoryDialog('Empty');assert.equal(elements['#category-select-all'].checked,false);console.log('Category selection controls passed');})().catch(e=>{console.error(e);process.exitCode=1});

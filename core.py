@@ -185,6 +185,12 @@ def normalize_category_changes(deck,changes):
                 if not matches:raise ValueError('Card not found in this deck: '+name)
                 if matches[0] not in canonical:canonical.append(matches[0])
             item['cards']=canonical
+            if 'ids' in raw:
+                ids=raw['ids']
+                if not isinstance(ids,list) or not ids or len(ids)>10000 or any(not isinstance(i,str) for i in ids):raise ValueError('Invalid card selection.')
+                selected=[c for c in probe['cards'] if c['id'] in set(ids)]
+                if len(selected)!=len(set(ids)) or {key(c['name']) for c in selected}!={key(n) for n in canonical}:raise ValueError('Selection changed. Reopen the category editor.')
+                item['ids']=list(dict.fromkeys(ids))
         item['reason']=str(raw.get('reason',''))[:1000]
         _perform_category_change(probe,item);normalized.append(item)
     return normalized
@@ -199,7 +205,7 @@ def _perform_category_change(deck,item):
     elif action=='move':
         names={key(n) for n in item['cards']}
         for c in deck['cards']:
-            if key(c['name']) in names:c['group']=item['to'];c['category_manual']=True
+            if key(c['name']) in names and ('ids' not in item or c['id'] in item['ids']):c['group']=item['to'];c['category_manual']=True
     elif action=='delete':
         if any(c.get('group','Uncategorized')==item['from'] for c in deck['cards']):raise ValueError('This category contains cards. Move them or merge the category first; cards will not be deleted.')
         categories.discard(item['from'])
@@ -270,3 +276,22 @@ def apply_workspace_plan(deck,categories,changes,plan_id=None):
         if k in probe:deck[k]=probe[k]
     deck['history'].append(history)
     return cats,edits
+
+
+def remove_selected_cards(deck, ids, category):
+    """Validate the entire selection before an undoable, deck-only removal."""
+    if not isinstance(ids,list) or not ids or len(ids)>10000 or any(not isinstance(i,str) or not i for i in ids):
+        raise ValueError('Select cards to remove.')
+    if not isinstance(category,str) or not category:
+        raise ValueError('Category required.')
+    wanted=set(ids)
+    selected=[c for c in deck['cards'] if c['id'] in wanted]
+    if len(selected)!=len(wanted):raise ValueError('Selection changed. Reopen the category editor.')
+    for c in selected:
+        if (c.get('group') or ('Commander' if c.get('zone')=='commander' else 'Uncategorized'))!=category:
+            raise ValueError('Selection changed. Reopen the category editor.')
+        if c.get('protected'):raise ValueError('Unselect protected cards before removing cards.')
+        if c.get('zone')=='commander':raise ValueError('Remove commanders individually from card details.')
+    before=copy.deepcopy(deck['cards'])
+    deck['cards']=[c for c in deck['cards'] if c['id'] not in wanted]
+    deck['history'].append({'id':uid(),'type':'card','summary':'Remove selected cards: '+str(len(selected))+' entries from '+category,'before':before})

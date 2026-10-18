@@ -3,7 +3,7 @@
 import argparse, base64, copy, datetime, html, json, os, re, secrets, sqlite3, threading, time, urllib.error, urllib.parse, urllib.request, webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from core import auto_categorize_card, uid, key, parse_import, make_entry, analysis, availability, mana_sample, apply_swap, category_names, normalize_category_changes, apply_category_changes, normalize_workspace_changes, apply_workspace_plan
+from core import remove_selected_cards, auto_categorize_card, uid, key, parse_import, make_entry, analysis, availability, mana_sample, apply_swap, category_names, normalize_category_changes, apply_category_changes, normalize_workspace_changes, apply_workspace_plan
 from seed import initial_state
 import updater
 import launcher
@@ -691,6 +691,8 @@ class Handler(BaseHTTPRequestHandler):
                     changed=sum(categorize_board_card(state,deck,c,known) for c in deck['cards'] if c.get('zone')==zone)
                     if deck['cards']!=before:deck['history'].append({'id':uid(),'type':'category','summary':'Auto-categorized '+('Mainboard' if zone=='main' else 'Considering')+': '+str(changed)+' cards','before':before})
                     write_state(state);return self.send_json({'ok':True,'categorized':changed,'undo_available':deck['cards']!=before,'unresolved':sum(c.get('zone')==zone and c.get('group')=='Uncategorized' for c in deck['cards'])})
+                elif path=='/api/cards-remove':
+                    remove_selected_cards(deck,payload.get('ids'),payload.get('category'))
                 elif path=='/api/card':
                     action=payload.get('action'); before=copy.deepcopy(deck['cards']); c=next((x for x in deck['cards'] if x['id']==payload.get('id')),None)
                     if action=='add':

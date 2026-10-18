@@ -160,6 +160,37 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(len(server.read_state()['decks'][0]['cards']),n+1)
         with self.request('/api/undo',{'deck':ident}) as r:json.load(r)
         self.assertEqual(len(server.read_state()['decks'][0]['cards']),n)
+    def test_bulk_remove_exact_entries_undo_and_collection(self):
+        state=server.read_state();d=state['decks'][0]
+        a=core.make_entry('Selection duplicate',2);a.update(group='Selection',zone='main')
+        b=copy.deepcopy(a);b.update(id=core.uid(),zone='maybe',qty=1)
+        other=core.make_entry('Other selected',1);other['group']='Selection'
+        d['cards'].extend([a,b,other]);server.write_state(state)
+        before=copy.deepcopy(d['cards']);collection=copy.deepcopy(state['collection']);history=len(d['history'])
+        with self.request('/api/cards-remove',{'deck':d['id'],'ids':[b['id'],other['id'],b['id']],'category':'Selection'}) as r:self.assertTrue(json.load(r)['ok'])
+        after=server.read_state();changed=after['decks'][0]
+        self.assertIn(a,changed['cards']);self.assertNotIn(b,changed['cards']);self.assertNotIn(other,changed['cards'])
+        self.assertEqual(after['collection'],collection);self.assertEqual(len(changed['history']),history+1)
+        with self.request('/api/undo',{'deck':d['id']}) as r:json.load(r)
+        self.assertEqual(server.read_state()['decks'][0]['cards'],before)
+    def test_category_selected_move_does_not_move_unchecked_copy(self):
+        state=server.read_state();d=state['decks'][0]
+        a=core.make_entry('Move duplicate',1);a['group']='Selection'
+        b=copy.deepcopy(a);b.update(id=core.uid(),zone='maybe');d['cards'].extend([a,b]);server.write_state(state)
+        with self.request('/api/category',{'deck':d['id'],'changes':[{'action':'move','cards':[b['name']],'ids':[b['id']],'to':'Destination'}]}) as r:json.load(r)
+        after=server.read_state()['decks'][0]['cards']
+        self.assertEqual(next(c for c in after if c['id']==a['id'])['group'],'Selection')
+        self.assertEqual(next(c for c in after if c['id']==b['id'])['group'],'Destination')
+    def test_bulk_remove_validation_is_atomic(self):
+        state=server.read_state();d=state['decks'][0]
+        a=core.make_entry('Safe selection',1);a['group']='Selection'
+        b=core.make_entry('Blocked selection',1);b.update(group='Selection',protected=True)
+        d['cards'].extend([a,b]);server.write_state(state)
+        cases=[([a['id'],b['id']],'Selection'),([a['id'],'missing'],'Selection'),([a['id']],'Wrong'),([], 'Selection'),('invalid','Selection'),([d['cards'][0]['id']],d['cards'][0]['group'])]
+        for ids,category in cases:
+            with self.subTest(ids=ids):
+                with self.assertRaises(urllib.error.HTTPError) as error:self.request('/api/cards-remove',{'deck':d['id'],'ids':ids,'category':category})
+                self.assertEqual(error.exception.code,400);self.assertEqual(server.read_state(),state)
     def test_chat_saves_proposal_not_applies(self):
         s=server.read_state();ident=s['active'];before=copy.deepcopy(s['decks'][0]['cards'])
         fake={'reply':'Consider this.','proposals':[{'add':'Test Add','cut':'Forest','reason':'Testing'}],'memory_suggestions':[{'text':'Low curve','scope':'deck'}]}

@@ -74,6 +74,11 @@ History uses published releases from your configured GitHub repository. Cached h
 
 ### Changelog
 
+**0.2.16**
+
+- Add Select all, partial-selection counts and board labels in Edit category.
+- Remove selected entries (all their copies) from the deck with one-step Undo. Collection ownership is unchanged; protected cards and commanders cannot be bulk removed.
+
 **0.2.15**
 
 - Add seven collection sort options and ascending/descending controls.
