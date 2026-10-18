@@ -74,6 +74,13 @@ History uses published releases from your configured GitHub repository. Cached h
 
 ### Changelog
 
+**0.2.17**
+
+- Fix manually created Uncategorized categories blocking the Auto-categorize button. Explicit auto-categorizing resets unassigned categories; automatic board entry continues to preserve manual choices.
+
+- Auto-categorize now retrieves missing rules text and card types from Scryfall in batches, using saved data and cache first. Card images alone are not sufficient metadata.
+- Show busy status and retrieval failures; retain custom categories, board scope and one-step Undo. Offline requests still categorize cards with saved data.
+
 **0.2.16**
 
 - Add Select all, partial-selection counts and board labels in Edit category.

@@ -250,8 +250,8 @@ class HttpTests(unittest.TestCase):
         with self.request('/api/card',{'deck':d['id'],'action':'edit','id':card['id'],'zone':'maybe'}) as response:json.load(response)
         self.assertEqual(server.deck_of(server.read_state(),d['id'])['cards'][-1]['group'],'Draw')
         with self.request('/api/card',{'deck':d['id'],'action':'edit','id':card['id'],'group':'Uncategorized'}) as response:json.load(response)
-        with self.request('/api/auto-categorize',{'deck':d['id']}) as response:self.assertEqual(json.load(response)['categorized'],0)
-        self.assertEqual(server.deck_of(server.read_state(),d['id'])['cards'][-1]['group'],'Uncategorized')
+        with self.request('/api/auto-categorize',{'deck':d['id']}) as response:self.assertEqual(json.load(response)['categorized'],1)
+        self.assertEqual(server.deck_of(server.read_state(),d['id'])['cards'][-1]['group'],'Draw')
     def test_existing_considering_auto_button_undo_keeps_other_boards(self):
         state=server.read_state();d=server.deck_of(state,state['active'])
         d['cards'] += [dict(core.make_entry('Candidate',1,'Considering'),oracle_text='Draw two cards.',type_line='Instant'),dict(core.make_entry('Custom',1,'Considering'),group='My engine',oracle_text='Draw two cards.')]
@@ -285,6 +285,59 @@ class HttpTests(unittest.TestCase):
         state=server.read_state();d=server.deck_of(state,state['active']);d['cards']=[];before=copy.deepcopy(d['history']);server.write_state(state)
         with self.request('/api/auto-categorize',{'deck':d['id'],'zone':'main'}) as response:self.assertFalse(json.load(response)['undo_available'])
         self.assertEqual(server.deck_of(server.read_state(),d['id'])['history'],before)
+    def test_autocategorize_resolves_image_only_cards_and_undo(self):
+        state=server.read_state();d=state['decks'][0]
+        c=dict(core.make_entry('Auto Fresh Draw',2,'Considering'),image='https://cards.scryfall.io/example.jpg')
+        main=dict(core.make_entry('Other Board Missing',1),group='Uncategorized')
+        custom=dict(core.make_entry('Keep Custom Missing',1,'Considering'),group='My engine')
+        manual=dict(core.make_entry('Keep Manual Missing',1,'Considering'),group='My manual engine',category_manual=True)
+        d['cards']=[c,main,custom,manual];before=copy.deepcopy(d['cards']);collection=copy.deepcopy(state['collection']);server.write_state(state)
+        raw={'id':'auto-fresh-draw','name':c['name'],'cmc':2,'type_line':'Instant','oracle_text':'Draw two cards.','color_identity':['B']}
+        with patch.object(server,'scry',return_value={'data':[raw]}) as fetch:
+            with self.request('/api/auto-categorize',{'deck':d['id'],'resolve':True}) as response:result=json.load(response)
+        self.assertEqual(fetch.call_args.args[1]['identifiers'],[{'name':c['name']}]);self.assertEqual(result['categorized'],1);self.assertEqual(result['metadata_resolved'],1);self.assertEqual(result['unresolved'],0)
+        after=server.read_state();saved=after['decks'][0]['cards'];self.assertEqual(saved[0]['group'],'Draw');self.assertEqual(saved[0]['qty'],2);self.assertEqual(saved[1:],before[1:]);self.assertEqual(after['collection'],collection)
+        with self.request('/api/undo',{'deck':d['id']}) as response:json.load(response)
+        self.assertEqual(server.read_state()['decks'][0]['cards'],before)
+        with patch.object(server,'scry',side_effect=AssertionError('Cache should avoid network')):
+            with self.request('/api/auto-categorize',{'deck':d['id'],'resolve':True}) as response:self.assertEqual(json.load(response)['categorized'],1)
+    def test_autocategorize_resets_manually_created_uncategorized(self):
+        state=server.read_state();d=state['decks'][0]
+        c=dict(core.make_entry('Auto Manual Reset',1,'Considering'),group='Tokens',type_line='Creature',oracle_text='Create a Food token.')
+        d['cards']=[c];server.write_state(state)
+        with self.request('/api/category',{'deck':d['id'],'changes':[{'action':'create','to':'Uncategorized'},{'action':'move','cards':[c['name']],'to':'Uncategorized'}]}) as response:json.load(response)
+        before=copy.deepcopy(server.read_state()['decks'][0]['cards']);self.assertTrue(before[0]['category_manual'])
+        with patch.object(server,'scry',side_effect=AssertionError('Already resolved')):
+            with self.request('/api/auto-categorize',{'deck':d['id'],'resolve':True}) as response:self.assertEqual(json.load(response)['categorized'],1)
+        saved=server.read_state()['decks'][0]['cards'][0];self.assertEqual(saved['group'],'Tokens');self.assertNotIn('category_manual',saved)
+        with self.request('/api/undo',{'deck':d['id']}) as response:json.load(response)
+        self.assertEqual(server.read_state()['decks'][0]['cards'],before)
+    def test_autocategorize_hydrates_manually_reset_cards(self):
+        state=server.read_state();d=state['decks'][0];c=dict(core.make_entry('Auto Manual Unresolved',1,'Considering'),group='Uncategorized',category_manual=True);d['cards']=[c];server.write_state(state)
+        raw={'id':'manual-unresolved','name':c['name'],'type_line':'Instant','oracle_text':'Draw two cards.'}
+        with patch.object(server,'scry',return_value={'data':[raw]}):
+            with self.request('/api/auto-categorize',{'deck':d['id'],'resolve':True}) as response:self.assertEqual(json.load(response)['categorized'],1)
+        self.assertEqual(server.read_state()['decks'][0]['cards'][0]['group'],'Draw')
+    def test_autocategorize_batches_and_does_not_guess_unknown_names(self):
+        state=server.read_state();d=state['decks'][0];d['cards']=[core.make_entry('Auto Batch '+str(i),1,'Considering') for i in range(76)];server.write_state(state)
+        def fetch(path,payload):
+            return {'data':[{'id':'batch-'+n['name'],'name':n['name'],'type_line':'Creature','oracle_text':'','cmc':1} for n in payload['identifiers'] if n['name']!='Auto Batch 75']}
+        with patch.object(server,'scry',side_effect=fetch) as lookup:
+            with self.request('/api/auto-categorize',{'deck':d['id'],'resolve':True}) as response:result=json.load(response)
+        self.assertEqual([len(c.args[1]['identifiers']) for c in lookup.call_args_list],[75,1]);self.assertEqual(result['categorized'],75);self.assertEqual(result['unresolved'],1)
+    def test_autocategorize_offline_uses_local_data_and_reports_failure(self):
+        state=server.read_state();d=state['decks'][0];d['cards']=[core.make_entry('Auto Offline Unknown',1,'Considering'),dict(core.make_entry('Auto Offline Draw',1,'Considering'),type_line='Instant',oracle_text='Draw two cards.')];server.write_state(state)
+        with patch.object(server,'scry',side_effect=ValueError('Service unavailable')):
+            with self.request('/api/auto-categorize',{'deck':d['id'],'resolve':True}) as response:result=json.load(response)
+        self.assertTrue(result['metadata_fetch_failed']);self.assertEqual(result['categorized'],1);self.assertEqual(result['unresolved'],1)
+    def test_autocategorize_rechecks_category_after_network(self):
+        state=server.read_state();d=state['decks'][0];c=core.make_entry('Auto Changed During Fetch',1,'Considering');d['cards']=[c];server.write_state(state)
+        def fetch(*args):
+            current=server.read_state();current['decks'][0]['cards'][0]['group']='User choice';server.write_state(current)
+            return {'data':[{'id':'race-draw','name':c['name'],'type_line':'Instant','oracle_text':'Draw two cards.'}]}
+        with patch.object(server,'scry',side_effect=fetch):
+            with self.request('/api/auto-categorize',{'deck':d['id'],'resolve':True}) as response:result=json.load(response)
+        self.assertEqual(result['categorized'],0);self.assertFalse(result['undo_available']);self.assertEqual(server.read_state()['decks'][0]['cards'][0]['group'],'User choice')
     def test_old_cache_refreshes_once_for_filter_metadata(self):
         old=dict(core.make_entry('Filter Cache Candidate',1),power='2',scryfall_id='old-cache')
         with server.db() as con:con.execute('INSERT OR REPLACE INTO cache VALUES (?,?)',(core.key(old['name']),json.dumps(old)))

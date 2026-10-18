@@ -299,8 +299,11 @@ function syncViewSettings(){
 }
 function persistView(fields){run(()=>mutate('view',{settings:fields}))}
 $('#auto-categorize').onclick=()=>run(async()=>{
- const result=await mutate('auto-categorize',{zone});groupBy='category';await mutate('view',{settings:{group_by:'category'}});
- toast(result.categorized+' cards categorized. Custom categories kept.'+(result.unresolved?' '+result.unresolved+' unresolved; resolve card data to improve matches.':'')+(result.undo_available?' Undo is available.':''));
+ const button=$('#auto-categorize');if(button.disabled)return;const label=button.textContent,board=zone;button.disabled=true;button.textContent='Resolving & categorizing…';
+ try{
+  const result=await mutate('auto-categorize',{zone:board,resolve:true});groupBy='category';await mutate('view',{settings:{group_by:'category'}});
+  toast(result.categorized+' cards categorized. Custom categories kept.'+(result.metadata_resolved?' Card data resolved for '+result.metadata_resolved+' names.':'')+(result.unresolved?' '+result.unresolved+' remain uncategorized.':'')+(result.metadata_fetch_failed?' Card data could not be retrieved; check your connection and retry.':'')+(result.undo_available?' Undo is available.':''));
+ }finally{button.disabled=false;button.textContent=label}
 });
 $('#new-category').onclick=()=>{modal('New category','<label class="field">Category name<input id="create-category-name" maxlength="80" placeholder="For example: Free sacrifice outlets"></label><button id="create-category" class="button primary">Create category</button>');$('#create-category').onclick=()=>run(async()=>{await mutate('category',{changes:[{action:'create',to:$('#create-category-name').value}]});groupBy='category';closeModal();persistView({group_by:'category'});toast('Category created. Drag cards into it.');});};
 $('#deck-name').onclick=()=>{modal('Rename deck',`<label class="field">Deck name<input id="rename-deck-name" value="${esc(deck().name)}" maxlength="80"></label><button id="rename-deck-save" class="button primary">Save name</button>`);$('#rename-deck-save').onclick=()=>run(async()=>{await mutate('category',{changes:[],workspace_changes:[{action:'rename_deck',name:$('#rename-deck-name').value}]});closeModal();toast('Deck renamed.');});};

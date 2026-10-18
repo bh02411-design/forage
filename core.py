@@ -131,9 +131,12 @@ CATEGORY_RULES=[
  ('Food',['Food'],r'\bfood\b')
 ]
 
-def auto_categorize_card(deck,card):
+def auto_category_candidate(card,zone=None,include_manual=False):
+    return card.get('zone') in ['main','maybe'] and (zone is None or card.get('zone')==zone) and (include_manual or not card.get('category_manual')) and str(card.get('group','')).casefold() in GENERIC_CATEGORIES
+
+def auto_categorize_card(deck,card,include_manual=False):
     """Fill an unassigned board category; never replace a deliberate category."""
-    if card.get('zone') not in ['main','maybe'] or card.get('category_manual') or str(card.get('group','')).casefold() not in GENERIC_CATEGORIES:return False
+    if not auto_category_candidate(card,include_manual=include_manual):return False
     previous=card.get('group');label=None
     for peer in deck['cards']:
         if peer is not card and key(peer['name'])==key(card['name']) and str(peer.get('group','')).casefold() not in GENERIC_CATEGORIES:
@@ -153,6 +156,7 @@ def auto_categorize_card(deck,card):
         for kind in ['Creature','Planeswalker','Instant','Sorcery','Enchantment','Artifact','Battle']:
             if kind in typ:label=choose(kind,[kind,kind+'s']);break
     card['group']=label or 'Uncategorized'
+    if label and include_manual:card.pop('category_manual',None)
     return bool(label and card['group']!=previous)
 
 # Primary presentation categories are separate from overlapping analytical roles.

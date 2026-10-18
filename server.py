@@ -3,7 +3,7 @@
 import argparse, base64, copy, datetime, html, json, os, re, secrets, sqlite3, threading, time, urllib.error, urllib.parse, urllib.request, webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from core import remove_selected_cards, auto_categorize_card, uid, key, parse_import, make_entry, analysis, availability, mana_sample, apply_swap, category_names, normalize_category_changes, apply_category_changes, normalize_workspace_changes, apply_workspace_plan
+from core import auto_category_candidate, remove_selected_cards, auto_categorize_card, uid, key, parse_import, make_entry, analysis, availability, mana_sample, apply_swap, category_names, normalize_category_changes, apply_category_changes, normalize_workspace_changes, apply_workspace_plan
 from seed import initial_state
 import updater
 import launcher
@@ -18,7 +18,7 @@ REQUEST_LOCK=threading.RLock()
 TOKEN=secrets.token_urlsafe(32)
 LOCK=threading.RLock(); API_LOCK=threading.Lock(); LAST_CALL=0
 
-def categorize_board_card(state,deck,card,known=None):
+def categorize_board_card(state,deck,card,known=None,include_manual=False):
     if card.get('zone') not in ['main','maybe']:return False
     source=(known if known is not None else catalog(state,deck)).get(key(card['name']),{})
     if not card.get('type_line') and source.get('type_line'):
@@ -26,7 +26,32 @@ def categorize_board_card(state,deck,card,known=None):
             if field in source:card[field]=source[field]
     for field in FACT_FIELDS+['image','land','mdfc','roles']+SEARCH_FIELDS:
         if card.get(field) in [None,'',[]] and source.get(field) is not None:card[field]=copy.deepcopy(source[field])
-    return auto_categorize_card(deck,card)
+    return auto_categorize_card(deck,card,include_manual=include_manual)
+
+def category_metadata(state,deck,zone):
+    """Resolve only unassigned cards on the requested board, outside the workspace lock."""
+    known=catalog(state,deck);resolved={};missing={};failed=False
+    for c in deck['cards']:
+        if not auto_category_candidate(c,zone,include_manual=True):continue
+        k=key(c['name']);source=known.get(k,{})
+        if source.get('type_line') and (source.get('oracle_text') or source.get('scryfall_id')):continue
+        with db() as con:row=con.execute('SELECT payload FROM cache WHERE name=?',(k,)).fetchone()
+        cached=json.loads(row[0]) if row else {}
+        if cached.get('type_line') and (cached.get('oracle_text') or cached.get('scryfall_id')):resolved[k]=cached
+        else:missing[k]=c['name']
+    names=list(missing.values())
+    for offset in range(0,len(names),75):
+        batch=names[offset:offset+75];requested={key(n) for n in batch}
+        try:
+            response=scry('/cards/collection',{'identifiers':[{'name':n} for n in batch]})
+            for raw in response.get('data',[]):
+                card=card_data(raw);k=key(card['name'])
+                if k not in requested:continue
+                resolved[k]=card
+                with db() as con:con.execute('INSERT OR REPLACE INTO cache VALUES (?,?)',(k,json.dumps(card)))
+        except (ValueError,OSError):
+            failed=True;break
+    return resolved,failed
 
 def visual_recommendations(state,deck,result):
     """UI metadata comes from the local catalog, never model-provided artwork."""
@@ -638,6 +663,13 @@ class Handler(BaseHTTPRequestHandler):
                             deck['proposals'].append({'id':uid(),'add':p['add'],'cut':p['cut'],'reason':p['reason'],'status':'pending'})
                     write_state(state)
                 return self.send_json({'ok':True})
+            category_resolved={};category_fetch_failed=False
+            if path=='/api/auto-categorize':
+                requested_zone=payload.get('zone','maybe')
+                if requested_zone not in ['main','maybe']:raise ValueError('Choose Mainboard or Considering.')
+                if payload.get('resolve') is True:
+                    snapshot=read_state();target=deck_of(snapshot,payload.get('deck',snapshot['active']))
+                    category_resolved,category_fetch_failed=category_metadata(snapshot,target,requested_zone)
             resolved=None
             if path=='/api/proposal' and payload.get('action')=='accept':
                 state=read_state(); deck=deck_of(state,payload['deck']); p=next(p for p in deck['proposals'] if p['id']==payload['id'])
@@ -687,10 +719,10 @@ class Handler(BaseHTTPRequestHandler):
                 elif path=='/api/auto-categorize':
                     zone=payload.get('zone','maybe')
                     if zone not in ['main','maybe']:raise ValueError('Choose Mainboard or Considering.')
-                    before=copy.deepcopy(deck['cards']);known=catalog(state,deck)
-                    changed=sum(categorize_board_card(state,deck,c,known) for c in deck['cards'] if c.get('zone')==zone)
+                    before=copy.deepcopy(deck['cards']);known={**catalog(state,deck),**category_resolved}
+                    changed=sum(categorize_board_card(state,deck,c,known,include_manual=True) for c in deck['cards'] if auto_category_candidate(c,zone,include_manual=True))
                     if deck['cards']!=before:deck['history'].append({'id':uid(),'type':'category','summary':'Auto-categorized '+('Mainboard' if zone=='main' else 'Considering')+': '+str(changed)+' cards','before':before})
-                    write_state(state);return self.send_json({'ok':True,'categorized':changed,'undo_available':deck['cards']!=before,'unresolved':sum(c.get('zone')==zone and c.get('group')=='Uncategorized' for c in deck['cards'])})
+                    write_state(state);return self.send_json({'ok':True,'categorized':changed,'undo_available':deck['cards']!=before,'metadata_resolved':len(category_resolved),'metadata_fetch_failed':category_fetch_failed,'unresolved':sum(auto_category_candidate(c,zone,include_manual=True) for c in deck['cards'])})
                 elif path=='/api/cards-remove':
                     remove_selected_cards(deck,payload.get('ids'),payload.get('category'))
                 elif path=='/api/card':
