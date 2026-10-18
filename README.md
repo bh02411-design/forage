@@ -74,6 +74,11 @@ History uses published releases from your configured GitHub repository. Cached h
 
 ### Changelog
 
+**0.2.26**
+
+- Show commander-identity colors only in mana comparison stats; combine all assigned commanders. Show colorless when production/cost uses it, or for colorless commanders.
+- Keep all colors visible when commander identity is unresolved. Visible color cards fill the panel width, and displayed percentages normalize to visible colors.
+
 **0.2.25**
 
 - Move Mana cost vs production, including Optimize basics, above the mana curve and role panels.

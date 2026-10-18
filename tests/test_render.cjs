@@ -131,3 +131,14 @@ console.log('8 pending-decision header/layout checks passed.');
  nodes['#mana-nonland'].onchange({target:{checked:false}});assert.equal(prefs.manaProductionNonlands,'no');assert.equal(nodes['#mana-nonland'].checked,false);assert.match(nodes['#mana-stats'].innerHTML,/G 100.0%/);
  console.log('Mana cost/production rendering and production-toggle checks passed.');
 }
+
+{
+ const nodes={},cards=[{name:'Commander',qty:1,zone:'commander',mana_cost:'{B}{G}',mv:2,color_identity:['B','G'],type_line:'Creature'},{name:'Forest',qty:5,zone:'main',land:true}];
+ const ctx={ForageCards:require('../static/card-view.js'),deck:()=>({cards}),$:s=>nodes[s]??=( {} ),$$:()=>[],uiRead:(k,f)=>f,uiSave:()=>{},esc:s=>String(s)};
+ vm.createContext(ctx);vm.runInContext(app.slice(app.indexOf('function renderManaStats('),app.indexOf('function filterStatus(')),ctx);ctx.renderManaStats();
+ assert.doesNotMatch(nodes['#mana-stats'].innerHTML,/mana-color-card.*?<strong>White<\/strong>/);assert.doesNotMatch(nodes['#mana-stats'].innerHTML,/<strong>Blue<\/strong>|<strong>Red<\/strong>|<strong>Colorless<\/strong>/);assert.match(nodes['#mana-stats'].innerHTML,/<strong>Black<\/strong>/);assert.match(nodes['#mana-stats'].innerHTML,/<strong>Green<\/strong>/);
+ cards.push({name:'Partner',qty:1,zone:'commander',mana_cost:'{W}',mv:1,color_identity:['W'],type_line:'Creature'});ctx.renderManaStats();assert.match(nodes['#mana-stats'].innerHTML,/<strong>White<\/strong>/);
+ cards.push({name:'Wastes',qty:1,zone:'main',land:true});ctx.renderManaStats();assert.match(nodes['#mana-stats'].innerHTML,/<strong>Colorless<\/strong>/);
+ delete cards[0].color_identity;ctx.renderManaStats();assert.match(nodes['#mana-stats'].innerHTML,/<strong>Blue<\/strong>/);
+ console.log('Commander-identity mana panel filtering and partner/colorless checks passed.');
+}

@@ -174,3 +174,6 @@ dialog.card-modal{width:min(1180px,96vw);max-width:96vw;max-height:94vh}
 .mana-color-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin-top:20px}.mana-color-card{border:1px solid var(--line);border-radius:6px;padding:12px;min-width:0}.mana-color-label{display:flex;align-items:center;gap:8px;margin-bottom:18px;font-size:12px}.mana-symbol{width:32px;height:32px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:600;flex-shrink:0}
 .mana-mini-track{height:10px;background:#29332a;border-radius:3px;overflow:hidden;margin:6px 0}.mana-mini-track>span{display:block;height:100%}.mana-color-card p{font-size:10px;color:var(--muted);margin:0 0 14px}.mana-color-card p:last-child{margin-bottom:0}
 @media(max-width:1100px){.mana-color-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:520px){.mana-color-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.mana-stats-panel .panel-head{height:auto;min-height:56px;flex-wrap:wrap;padding:12px}.mana-segment{font-size:9px}}
+
+.mana-color-grid{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+@media(max-width:520px){.mana-color-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
