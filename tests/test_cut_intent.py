@@ -34,9 +34,33 @@ class CutIntentTests(unittest.TestCase):
         wrong={'reply':'Add unrelated draw cards.','recommendations':[{'name':'Collection Draw'}]}
         with patch.object(server,'request_json',side_effect=[answer(wrong),answer(self.good)]) as model:result=server.ai_chat(self.state,self.deck,self.question)
         self.assertEqual(model.call_count,2);self.assertIn('Candidates to remove',result['reply']);self.assertNotIn('Collection Draw',result['reply'])
+    def test_numbered_markdown_is_accepted_without_schema_retry(self):
+        text='Five removal candidates:\n\n'+'\n'.join(str(i+1)+'. **Main Cut '+str(i)+'** — Low contribution; lose its creature body.' for i in range(5))
+        with patch.object(server,'request_json',return_value={'choices':[{'message':{'content':text}}]}) as model:result=server.ai_chat(self.state,self.deck,'recommend me 5 cards to cut please')
+        self.assertEqual(model.call_count,1);self.assertEqual(len(result['cuts']),5);self.assertEqual(result['_context_trace']['cut_response_format'],'readable list')
+        self.assertIn('Low contribution',result['reply'])
+    def test_aliases_and_table_cut_responses(self):
+        formats=[{'cut_candidates':[{'card_name':c['name'],'why':c['reason']} for c in self.good['cuts']]},
+                 {'reply':'| Card | MV | Reason |\n|---|---|---|\n'+'\n'.join('| '+c['name']+' | 2 | '+c['reason']+' |' for c in self.good['cuts'])}]
+        for data in formats:
+            with patch.object(server,'request_json',return_value=answer(data)) as model:result=server.ai_chat(self.state,self.deck,self.question)
+            self.assertEqual(model.call_count,1);self.assertEqual(len(result['cuts']),5)
+    def test_incidental_or_keep_mentions_are_not_cut_recommendations(self):
+        for text in ['I would keep Main Cut 0. Main Cut 1 is good too.','1. **Main Cut 0** — Keep this engine.','1. Keep **Main Cut 0**.']:
+            normalized,_=advisor.normalize_cut_response(self.deck,{'reply':text});self.assertFalse(normalized.get('cuts'))
+    def test_recovered_lists_still_check_protected_and_wrong_board(self):
+        text='1. **Locked Main** — Remove as low contribution.\n2. **Considering Only** — Remove as low contribution.'
+        normalized,_=advisor.normalize_cut_response(self.deck,{'reply':text});issues=advisor.check_cuts(self.deck,normalized,advisor.cut_request('Give me 2 cuts'))
+        self.assertTrue(any('protected' in i for i in issues));self.assertTrue(any('not in the current mainboard' in i for i in issues))
+    def test_failure_has_actual_response_diagnostics_and_focused_prompt(self):
+        raw='I could not complete this review.'
+        with patch.object(server,'request_json',return_value={'choices':[{'message':{'content':raw}}]}) as model:result=server.ai_chat(self.state,self.deck,self.question)
+        self.assertEqual(result['_context_trace']['model_response_diagnostic']['text'],raw)
+        system=model.call_args.args[1]['messages'][0]['content'].split('\nWORKSPACE DATA:\n')[0]
+        self.assertNotIn('category_changes',system);self.assertIn('removal candidates',system)
     def test_wrong_answer_does_not_fallback_to_collection(self):
         with patch.object(server,'request_json',return_value=answer({'reply':'Add new cards instead.'})):result=server.ai_chat(self.state,self.deck,self.question)
-        self.assertIn('removal candidates',result['reply']);self.assertEqual(result['recommendations'],[]);self.assertNotIn('_collection_matches',result)
+        self.assertIn('verifiable mainboard cut list',result['reply']);self.assertEqual(result['recommendations'],[]);self.assertNotIn('_collection_matches',result)
     def test_cut_validation_rejects_wrong_board_locked_duplicate_and_count(self):
         task=advisor.cut_request(self.question)
         for name in ['Considering Only','Locked Main','Fixture Commander','Not owned']:

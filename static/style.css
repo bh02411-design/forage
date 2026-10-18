@@ -158,3 +158,5 @@ dialog.card-modal{width:min(1180px,96vw);max-width:96vw;max-height:94vh}
 .card-detail-controls>.field-row:first-of-type{margin-top:18px}
 .card-modal .oracle{font-size:14px;line-height:1.7}
 @media(max-width:760px){.card-modal .card-detail{grid-template-columns:minmax(0,1fr);gap:20px}.card-detail-art{position:static;width:min(360px,100%);justify-self:center}.card-modal .card-detail-art img{max-height:65vh}.card-modal .oracle{font-size:13px}}
+
+.model-diagnostic{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;max-height:400px;overflow:auto}

@@ -74,6 +74,11 @@ History uses published releases from your configured GitHub repository. Cached h
 
 ### Changelog
 
+**0.2.21**
+
+- Use a focused prompt for cut reviews. Accept clear numbered/bulleted removal lists, tables and common structured field aliases; validate the resulting candidates normally.
+- Preserve local-model format failures under Context used diagnostics, clearly marked as unverified, instead of exposing internal schema requirements in chat.
+
 **0.2.20**
 
 - Enlarge clicked-card dialogs, with a large artwork column and editing controls beside it; use a single-column view on smaller screens.

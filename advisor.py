@@ -93,6 +93,54 @@ def cut_request(message):
     count=(int(match[1]) if match[1].isdigit() else words[match[1]]) if match else None
     return {'task':'cuts','board':'main','count':count,'instruction':'Recommend removal candidates from the current MAINBOARD only. The desired draw/ramp/etc. describes why space is needed, not a request for collection additions. Do not search for additions. Return cuts: [{"name":"exact mainboard name","reason":"tradeoff and why expendable"}]. Exclude commanders, Considering and protected cards. Use the requested count; if evidence prevents that count, provide cut_limitations explaining the shortfall. Do not execute removals.'}
 
+def normalize_cut_response(deck,data):
+    """Recover explicit removal lists without selecting or ranking any cards ourselves."""
+    out=dict(data);reply=str(data.get('reply',''));source=None;format_name=None
+    for field in ['cuts','cut_candidates','cards_to_cut','cards_to_remove','cut_recommendations','removals']:
+        if isinstance(data.get(field),list) and data[field]:source=data[field];format_name=field;break
+    if source is None and not data.get('recommendations') and not data.get('proposals'):
+        # Only labeled list/table entries qualify; incidental mentions do not.
+        names=sorted({c['name'] for c in deck['cards']},key=len,reverse=True);source=[]
+        lines=reply.splitlines();starts=[]
+        def clean(s):return s.strip().strip('*_` ').strip()
+        for index,line in enumerate(lines):
+            cells=[clean(v) for v in line.strip().strip('|').split('|')]
+            if line.strip().startswith('|') and len(cells)>=2:
+                name=next((n for n in names if n.casefold()==cells[0].casefold()),None)
+                if name:
+                    if cells[1].casefold() in ['keep','retain','do not cut']:continue
+                    reason=' · '.join(cells[2:] if len(cells)>=3 else cells[1:]).strip()
+                    source.append({'name':name,'reason':reason})
+                continue
+            bullet=re.match(r'^\s*(?:[0-9]+[.)]|[-*•]|#{1,4})\s+(.+)',line)
+            if not bullet and not line.strip().startswith('**'):continue
+            text=(bullet[1] if bullet else line.strip()).strip()
+            text=re.sub(r'^(?:cut|remove)\s*:?\s*','',text,flags=re.I)
+            for name in names:
+                match=re.match(r'^(?:\*\*|__|`)?'+re.escape(name)+r'(?![\w])(?:\*\*|__|`)?',text,re.I)
+                if match:starts.append((index,name,text[match.end():].strip(' *`_—–-:')));break
+        for number,(index,name,tail) in enumerate(starts):
+            end=starts[number+1][0] if number+1<len(starts) else len(lines)
+            following=[]
+            for line in lines[index+1:end]:
+                if re.match(r'^\s*(?:[0-9]+[.)]|[-*•]|#{1,4})\s+',line):break
+                following.append(line.strip())
+            reason=' '.join([tail,*following]).strip()
+            if re.match(r"^(?:keep|retain|do not cut|don't cut)\b",reason,re.I):continue
+            source.append({'name':name,'reason':reason})
+        format_name='readable list'
+    if source is None:return out,None
+    normalized=[]
+    for item in source:
+        if isinstance(item,str):normalized.append({'name':item,'reason':''});continue
+        if not isinstance(item,dict):return out,None
+        name=item.get('name',item.get('card',item.get('card_name',item.get('cut'))))
+        if isinstance(name,dict):name=name.get('name')
+        reason=item.get('reason',item.get('rationale',item.get('explanation',item.get('justification',item.get('why','')))))
+        normalized.append({'name':name,'reason':reason})
+    if normalized:out['cuts']=normalized
+    return out,format_name if normalized else None
+
 def check_cuts(deck,data,task):
     issues=[];cuts=data.get('cuts');main={key(c['name']):c for c in deck['cards'] if c['zone']=='main'};seen=set()
     if data.get('recommendations') or data.get('proposals'):issues.append('This request is for cuts only, not additions or swaps.')
