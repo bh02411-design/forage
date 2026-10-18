@@ -74,6 +74,10 @@ History uses published releases from your configured GitHub repository. Cached h
 
 ### Changelog
 
+**0.2.24**
+
+- Add the branded green Forage favicon to browser tabs. The scalable icon is bundled directly in the page and matches the Windows tray mark.
+
 **0.2.23**
 
 - Add mana cost versus potential production statistics, W/U/B/R/G/C breakdowns, and a mana-permanents toggle. Counts use Mainboard + commander and explicitly separate potential color coverage from simultaneous production.
