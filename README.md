@@ -74,6 +74,10 @@ History uses published releases from your configured GitHub repository. Cached h
 
 ### Changelog
 
+**0.2.29**
+
+- Remove Mainboard/Considering labels from cards in shared Swap In and Swap Out categories and their category editor. Present the section as Swap staging, separate from both board totals.
+
 **0.2.28**
 
 - Exclude Swap In and Swap Out cards from Mainboard and Considering totals, including renamed swap categories. Keep each staging category’s own count visible.
