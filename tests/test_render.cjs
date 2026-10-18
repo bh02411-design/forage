@@ -142,3 +142,24 @@ console.log('8 pending-decision header/layout checks passed.');
  delete cards[0].color_identity;ctx.renderManaStats();assert.match(nodes['#mana-stats'].innerHTML,/<strong>Blue<\/strong>/);
  console.log('Commander-identity mana panel filtering and partner/colorless checks passed.');
 }
+
+// Run sidebar startup and clicks with persisted browser preferences.
+{
+ const code=app.slice(app.indexOf('function setSidebarCollapsed('),app.indexOf('let cardMode='));
+ const boot=(saved)=>{
+  const classes=new Set(),attributes={},button={setAttribute:(k,v)=>attributes[k]=v};
+  const shell={classList:{toggle:(k,on)=>on?classes.add(k):classes.delete(k),contains:k=>classes.has(k)}};
+  const storage={sidebarCollapsed:saved};
+  const ctx={$:selector=>selector==='.shell'?shell:button,uiRead:(k,f)=>storage[k]||f,uiSave:(k,v)=>storage[k]=v};
+  vm.createContext(ctx);vm.runInContext(code,ctx);
+  return {classes,attributes,button,storage};
+ };
+ const first=boot('no');assert.equal(first.attributes['aria-expanded'],'true');
+ first.button.onclick();assert.ok(first.classes.has('sidebar-collapsed'));
+ assert.equal(first.storage.sidebarCollapsed,'yes');assert.equal(first.button.title,'Expand sidebar');
+ assert.equal(first.attributes['aria-label'],'Expand sidebar');assert.equal(first.attributes['aria-expanded'],'false');
+ const restored=boot(first.storage.sidebarCollapsed);assert.ok(restored.classes.has('sidebar-collapsed'));
+ restored.button.onclick();assert.equal(restored.storage.sidebarCollapsed,'no');
+ assert.equal(restored.attributes['aria-expanded'],'true');assert.equal(restored.button.title,'Collapse sidebar');
+ console.log('Sidebar startup, persistence, navigation state and toggle checks passed.');
+}

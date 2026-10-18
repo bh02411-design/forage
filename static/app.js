@@ -6,6 +6,15 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const norm=s=>s.toLowerCase().split(' // ')[0].replace(/[^a-z0-9]/g,'');
 const uiRead=(k,fallback)=>{try{return localStorage.getItem('forage.'+k)||fallback}catch{return fallback}};
 const uiSave=(k,v)=>{try{localStorage.setItem('forage.'+k,v)}catch{}};
+function setSidebarCollapsed(collapsed){
+ $('.shell').classList.toggle('sidebar-collapsed',collapsed);
+ const button=$('#sidebar-toggle'),label=collapsed?'Expand sidebar':'Collapse sidebar';
+ button.setAttribute('aria-expanded',String(!collapsed));
+ button.setAttribute('aria-label',label);button.title=label;button.textContent=collapsed?'»':'«';
+ uiSave('sidebarCollapsed',collapsed?'yes':'no');
+}
+setSidebarCollapsed(uiRead('sidebarCollapsed','no')==='yes');
+$('#sidebar-toggle').onclick=()=>setSidebarCollapsed(!$('.shell').classList.contains('sidebar-collapsed'));
 let cardMode=uiRead('cardMode','stacks'),groupBy=uiRead('groupBy','category'),sortBy=uiRead('sortBy','name'),collectionMode=uiRead('collectionMode','grid'),collectionSort=uiRead('collectionSort','name'),collectionDirection=uiRead('collectionDirection','asc'),collectionLimit=60,deckExpanded=false;
 if(!['name','mana','color','type','rarity','owned','available'].includes(collectionSort))collectionSort='name';
 if(!['asc','desc'].includes(collectionDirection))collectionDirection='asc';

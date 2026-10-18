@@ -74,6 +74,11 @@ History uses published releases from your configured GitHub repository. Cached h
 
 ### Changelog
 
+**0.2.27**
+
+- Collapse the desktop sidebar to an icon rail with the arrow button; expand it again at any time. Your preference is remembered on this browser.
+- Navigation and settings remain accessible with tooltips; smaller screens keep their full horizontal menu.
+
 **0.2.26**
 
 - Show commander-identity colors only in mana comparison stats; combine all assigned commanders. Show colorless when production/cost uses it, or for colorless commanders.

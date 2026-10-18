@@ -11,6 +11,7 @@ MAX_PACKAGE=20*1024*1024
 
 # Release notes stay in an existing updater file so older installers accept the package.
 CHANGELOG={
+ '0.2.27':['Add a collapsible desktop sidebar with accessible icon navigation and a remembered preference.','Keep the full horizontal navigation available on smaller screens.'],
  '0.2.26':['Show only commander-identity colors in mana comparison statistics, including combined partner identities.','Show colorless when relevant and let visible color cards fill the available width.'],
  '0.2.25':['Move Mana cost vs production above the mana curve and role panels.'],
  '0.2.24':['Add Forage’s branded green icon to the browser tab using a self-contained scalable favicon.'],

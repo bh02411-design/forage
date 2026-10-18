@@ -2,14 +2,15 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Forage — Your deck, understood.</title><link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22%230c140f%22%20stroke%3D%22%23465f3a%22%20stroke-width%3D%222%22%2F%3E%3Cpath%20d%3D%22M32%2012V52M12%2032H52M18%2018L46%2046M18%2046L46%2018%22%20fill%3D%22none%22%20stroke%3D%22%23c5e8a5%22%20stroke-width%3D%225%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fsvg%3E"><link rel="stylesheet" href="style.css"><script src="render.js" defer></script><script src="card-view.js" defer></script><script src="app.js" defer></script></head>
 <body>
 <div class="shell">
-<aside class="rail">
-  <a class="brand" href="#" aria-label="Forage home"><span class="mark">✳</span><span>forage<span class="brand-dot">.</span></span></a>
+<aside class="rail" id="workspace-sidebar">
+  <button id="sidebar-toggle" class="quiet sidebar-toggle" type="button" aria-controls="workspace-sidebar" aria-expanded="true" aria-label="Collapse sidebar" title="Collapse sidebar">«</button>
+  <a class="brand" href="#" aria-label="Forage home"><span class="mark">✳</span><span class="brand-name">forage<span class="brand-dot">.</span></span></a>
   <div class="rail-label">YOUR WORKSPACE</div>
   <label class="sr" for="deck-select">Active deck</label><select id="deck-select"></select>
   <button id="new-deck" class="quiet wide">＋ New deck</button>
-  <nav aria-label="Workspace"><button data-view="workbench" class="nav active">◈ <span>Workbench</span></button><button data-view="collection" class="nav">▦ <span>Collection</span><small id="collection-count">0</small></button><button data-view="memory" class="nav">✧ <span>Memory</span><small id="memory-count"></small></button><button data-view="history" class="nav">↶ <span>Decisions & history</span></button></nav>
+  <nav aria-label="Workspace"><button data-view="workbench" aria-label="Workbench" title="Workbench" class="nav active">◈ <span>Workbench</span></button><button data-view="collection" aria-label="Collection" title="Collection" class="nav">▦ <span>Collection</span><small id="collection-count">0</small></button><button data-view="memory" aria-label="Memory" title="Memory" class="nav">✧ <span>Memory</span><small id="memory-count"></small></button><button data-view="history" aria-label="Decisions & history" title="Decisions & history" class="nav">↶ <span>Decisions & history</span></button></nav>
   <div class="rail-note"><div class="eyebrow">BUILT AROUND YOU</div><p>Every card has a role.<br>Every choice has a reason.</p><div class="local-label"><span class="dot"></span> Stored on this computer</div></div>
-  <button id="settings-open" class="nav bottom">⚙ <span>Local AI & settings</span></button>
+  <button id="settings-open" class="nav bottom" aria-label="Local AI & settings" title="Local AI & settings">⚙ <span>Local AI & settings</span></button>
 </aside>
 <main>
 <header class="topbar"><div class="breadcrumb">PERSONAL DECK BUILDER <span>/</span> COMMANDER</div><div class="top-actions"><button id="backup" class="quiet">↓ Backup</button><button id="import-open" class="button secondary">↑ Import</button></div></header>

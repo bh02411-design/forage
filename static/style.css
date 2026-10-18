@@ -177,3 +177,18 @@ dialog.card-modal{width:min(1180px,96vw);max-width:96vw;max-height:94vh}
 
 .mana-color-grid{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
 @media(max-width:520px){.mana-color-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Desktop navigation can shrink to an icon rail without narrowing mobile navigation. */
+.sidebar-toggle{position:absolute;top:6px;right:8px;font-size:23px;line-height:1;min-width:32px;min-height:32px;border-radius:6px;color:var(--muted)}
+.sidebar-toggle:hover{color:var(--green);background:#1b251b}
+.sidebar-toggle:focus-visible{outline:2px solid var(--green);outline-offset:2px}
+@media(min-width:901px){
+ .shell.sidebar-collapsed{grid-template-columns:72px minmax(0,1fr)}
+ .sidebar-collapsed .rail{padding:48px 10px 25px}
+ .sidebar-collapsed .brand{margin:0 auto 26px;justify-content:center}
+ .sidebar-collapsed .brand-name,.sidebar-collapsed .rail-label,.sidebar-collapsed #deck-select,.sidebar-collapsed #new-deck,.sidebar-collapsed .rail-note,.sidebar-collapsed .rail .nav span,.sidebar-collapsed .rail .nav small{display:none}
+ .sidebar-collapsed .rail .nav{justify-content:center;padding:13px 8px;font-size:21px}
+ .sidebar-collapsed .rail .bottom{margin-top:auto;padding-top:23px}
+ .sidebar-collapsed .sidebar-toggle{right:20px}
+}
+@media(max-width:900px){.sidebar-toggle{display:none}}
