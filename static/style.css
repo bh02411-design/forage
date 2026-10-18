@@ -135,3 +135,26 @@
 .collection-sort-controls select{max-width:175px;font-size:11px;padding:7px 9px}
 
 .category-selection{display:flex;align-items:center;gap:8px;font-size:13px;margin:12px 0}.category-selection input{accent-color:var(--green)}.category-selection span{margin-left:auto;color:var(--muted)}
+
+/* Real swap categories have their own fixed column, outside the masonry flow. */
+.deck-surface{display:grid;grid-template-columns:minmax(0,1fr) calc(var(--card-width) + 28px);min-width:0}
+.deck-surface:has(.swap-categories[hidden]){grid-template-columns:minmax(0,1fr)}
+.swap-categories{min-width:0;height:clamp(500px,65vh,950px);overflow:auto;scrollbar-gutter:stable;padding:0 12px 20px;border-left:1px solid var(--line);background:#111810}
+.swap-categories[hidden]{display:none}
+.swap-panel-heading{font-size:9px;letter-spacing:1.2px;color:var(--muted);padding-top:16px}
+.swap-categories .visual-group{width:100%;margin-bottom:20px}
+.swap-categories .group-cards{grid-template-columns:minmax(0,1fr)}
+.deck-expanded .swap-categories{height:clamp(550px,72vh,1100px)}
+@media(min-width:2000px){.swap-categories{height:clamp(600px,68vh,1100px)}}
+@media(max-width:1199px){.swap-categories{height:600px}}
+@media(max-width:700px){.deck-surface{grid-template-columns:minmax(0,1fr)}.swap-categories,.deck-expanded .swap-categories{height:auto;max-height:520px;border-left:0;border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.swap-panel-heading{grid-column:1/-1}}
+
+/* Clicking a card opens a large, readable image beside its controls. */
+dialog.card-modal{width:min(1180px,96vw);max-width:96vw;max-height:94vh}
+.card-modal .card-detail{grid-template-columns:minmax(300px,min(440px,38vw)) minmax(0,1fr);gap:28px;align-items:start}
+.card-detail-art{position:sticky;top:0;min-width:0}
+.card-modal .card-detail-art img{display:block;width:100%;max-height:calc(94vh - 110px);object-fit:contain;object-position:top}
+.card-detail-controls{min-width:0}
+.card-detail-controls>.field-row:first-of-type{margin-top:18px}
+.card-modal .oracle{font-size:14px;line-height:1.7}
+@media(max-width:760px){.card-modal .card-detail{grid-template-columns:minmax(0,1fr);gap:20px}.card-detail-art{position:static;width:min(360px,100%);justify-self:center}.card-modal .card-detail-art img{max-height:65vh}.card-modal .oracle{font-size:13px}}

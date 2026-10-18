@@ -36,6 +36,7 @@ jobs:
       - run: node tests/test_search.cjs
       - run: node tests/test_collection_sort.cjs
       - run: node tests/test_category_selection.cjs
+      - run: node tests/test_swap_categories.cjs
       - run: node tests/test_render.cjs
       - run: python build_release.py --output dist/Forage-update.zip
       - name: Write readable release notes

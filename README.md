@@ -74,6 +74,14 @@ History uses published releases from your configured GitHub repository. Cached h
 
 ### Changelog
 
+**0.2.20**
+
+- Enlarge clicked-card dialogs, with a large artwork column and editing controls beside it; use a single-column view on smaller screens.
+
+- Pin Swap In and Swap Out as real categories in a separate right-hand Mainboard column. They remain visible across grouping, sorting and filtering; smaller screens place them beneath the board.
+- Support normal category movement, naming, bulk selection/removal and Undo. Cards in these categories are Mainboard entries and count toward deck totals. Rename preserves pinning; the two pinned categories cannot be deleted or merged together.
+- Hide empty ordinary category placeholders; preserve category definitions for later use.
+
 **0.2.19**
 
 - Distinguish requests for cuts from requests for additions, including cuts to make room for draw spells.

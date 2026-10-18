@@ -103,3 +103,13 @@ console.log('8 pending-decision header/layout checks passed.');
  ctx.api=async()=>({supported:false});await ctx.desktopDialog();assert.match(modals.at(-1),/currently supports Windows/);
  console.log('4 desktop setup interface checks passed.');
 })().catch(error=>{console.error(error);process.exitCode=1});
+
+{
+ const nodes={},toggles=[];
+ const ctx={$:s=>nodes[s]??=( {open:false,classList:{toggle:(...args)=>toggles.push(args)},showModal(){this.open=true}} ),available:()=>({owned:1,free:1}),ForageCards:require('../static/card-view.js'),state:{collection:[]},esc:s=>String(s??''),safeUrl:s=>s};
+ vm.createContext(ctx);vm.runInContext(app.slice(app.indexOf('function modal('),app.indexOf('function closeModal(')),ctx);vm.runInContext(app.slice(app.indexOf('function cardPreview('),app.indexOf('function editCard(')),ctx);
+ const preview=ctx.cardPreview({name:'Detail fixture',image:'https://cards.scryfall.io/normal/front/a/test.jpg',oracle_text:'Draw a card.'},'<button id="test-control">Save</button>');
+ ctx.modal('Detail',preview);assert.deepEqual(toggles.at(-1),['card-modal',true]);assert.ok(preview.indexOf('card-detail-controls')<preview.indexOf('test-control'));assert.match(preview,/card-detail-art/);
+ ctx.modal('Category','Other content');assert.deepEqual(toggles.at(-1),['card-modal',false]);assert.equal(nodes['#modal'].open,true);
+ console.log('Large card detail and modal reset checks passed.');
+}

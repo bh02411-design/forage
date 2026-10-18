@@ -181,6 +181,26 @@ class HttpTests(unittest.TestCase):
         after=server.read_state()['decks'][0]['cards']
         self.assertEqual(next(c for c in after if c['id']==a['id'])['group'],'Selection')
         self.assertEqual(next(c for c in after if c['id']==b['id'])['group'],'Destination')
+    def test_swap_categories_move_rename_remove_and_undo(self):
+        state=server.read_state();d=state['decks'][0];card=core.make_entry('Swap category fixture',2);d['cards'].append(card);server.write_state(state)
+        count=core.analysis(d)['total'];collection=copy.deepcopy(state['collection'])
+        self.assertEqual(core.swap_category_names(d),{'in':'Swap In','out':'Swap Out'})
+        with self.request('/api/category',{'deck':d['id'],'changes':[{'action':'move','cards':[card['name']],'to':'Swap Out'}]}) as response:json.load(response)
+        after=server.read_state();self.assertEqual(after['decks'][0]['cards'][-1]['group'],'Swap Out');self.assertEqual(core.analysis(after['decks'][0])['total'],count);self.assertEqual(after['collection'],collection)
+        with self.request('/api/category',{'deck':d['id'],'changes':[{'action':'rename','from':'Swap Out','to':'Likely Cuts'}]}) as response:json.load(response)
+        after=server.read_state()['decks'][0];self.assertEqual(after['swap_categories']['out'],'Likely Cuts');self.assertNotIn('Swap Out',core.category_names(after));self.assertEqual(after['cards'][-1]['group'],'Likely Cuts')
+        with self.request('/api/cards-remove',{'deck':d['id'],'ids':[card['id']],'category':'Likely Cuts'}) as response:json.load(response)
+        self.assertFalse(any(c['id']==card['id'] for c in server.read_state()['decks'][0]['cards']))
+        with self.request('/api/undo',{'deck':d['id']}) as response:json.load(response)
+        self.assertEqual(server.read_state()['decks'][0]['cards'][-1]['qty'],2)
+        with self.request('/api/undo',{'deck':d['id']}) as response:json.load(response)
+        after=server.read_state()['decks'][0];self.assertEqual(core.swap_category_names(after)['out'],'Swap Out');self.assertEqual(after['cards'][-1]['group'],'Swap Out')
+    def test_pinned_swap_categories_stay_distinct_and_present(self):
+        state=server.read_state();d=state['decks'][0]
+        for change in [{'action':'delete','from':'Swap In'},{'action':'merge','from':'Swap In','to':'Swap Out'}]:
+            with self.assertRaises(urllib.error.HTTPError):self.request('/api/category',{'deck':d['id'],'changes':[change]})
+            self.assertEqual(server.read_state(),state)
+        self.assertIn('Swap In',core.category_names(d));self.assertIn('Swap Out',core.category_names(d))
     def test_bulk_remove_validation_is_atomic(self):
         state=server.read_state();d=state['decks'][0]
         a=core.make_entry('Safe selection',1);a['group']='Selection'

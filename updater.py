@@ -11,6 +11,7 @@ MAX_PACKAGE=20*1024*1024
 
 # Release notes stay in an existing updater file so older installers accept the package.
 CHANGELOG={
+ '0.2.20':['Open clicked cards in a larger detail dialog with artwork beside editing controls.','Pin real Swap In and Swap Out categories in a separate Mainboard column on the right.','Support normal category editing, drag-and-drop, selection, removal and undo; keep custom renamed swap categories pinned.','Hide empty ordinary category placeholders without deleting cards or category definitions.'],
  '0.2.19':['Route explicit cut requests to the current mainboard instead of collection additions.','Validate distinct cut names, requested counts and protection flags; display checked removal candidates with costs and reasons.','Keep cut failures in the removal workflow instead of substituting unrelated collection matches.'],
  '0.2.18':['Compact large deck and Considering rosters without dropping card names, quantities, roles, categories or protection flags.','Reduce oversized pending-plan and decision payloads before shortening conversation history.','Report context-packaging limits accurately and include roster coverage in context diagnostics.'],
  '0.2.17':['Treat manually assigned Uncategorized cards as eligible when Auto-categorize is clicked; preserve named custom categories.','Resolve missing card rules and types automatically before auto-categorizing, using saved metadata and cache first.','Show progress and connection failures, preserve custom categories and other boards, and keep the operation undoable.'],

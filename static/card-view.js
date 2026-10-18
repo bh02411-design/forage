@@ -19,6 +19,14 @@ function groups(cards,by='category',sort='name'){
  if(commanders.length)entries.unshift(['Commander',commanders]);
  for(const [,list] of entries)list.sort((a,b)=>sort==='mana'?((a.mv??1000)-(b.mv??1000)||a.name.localeCompare(b.name)):a.name.localeCompare(b.name));return entries;
 }
+function swapCategoryNames(deck){return {in:deck.swap_categories?.in||'Swap In',out:deck.swap_categories?.out||'Swap Out'}}
+function boardGroups(cards,by='category',sort='name',deck={},mainboard=true){
+ if(!mainboard)return {main:groups(cards,by,sort),swaps:[]};
+ const pins=swapCategoryNames(deck),names=Object.values(pins);
+ const ordinary=cards.filter(c=>c.zone==='commander'||!names.includes(c.group));
+ const swaps=names.map(name=>[name,cards.filter(c=>c.zone!=='commander'&&c.group===name).sort((a,b)=>sort==='mana'?((a.mv??1000)-(b.mv??1000)||a.name.localeCompare(b.name)):a.name.localeCompare(b.name))]);
+ return {main:groups(ordinary,by,sort),swaps};
+}
 function tile(card,collection=[],source='deck',availability=null){
  const image=art(card,collection);const qty=card.qty??1;
  return `<button class="card-visual ${image?'has-art':'no-art'}" draggable="true" data-visual-card="${escape(card.id)}" data-card-source="${source}" aria-label="${escape(card.name)}${card.protected?', protected':''}" title="${escape(card.name)}"><span class="art-frame">${image?`<img src="${escape(image)}" loading="lazy" decoding="async" alt="${escape(card.name)}">`:`<span class="art-placeholder"><span class="placeholder-symbol">✳</span><strong>${escape(card.name)}</strong><small>Resolve card data for artwork</small></span>`}<span class="tile-badges"><span class="tile-quantity">${qty}×</span>${card.protected?'<span class="tile-protected" title="Protected">◆</span>':''}</span></span><span class="tile-caption"><strong>${escape(card.name)}</strong><small>${availability?`${availability.owned} owned · ${availability.free} unassigned`:card.land?'Land':'MV '+(card.mv??'?')}</small></span></button>`;
@@ -130,5 +138,5 @@ function sortCollection(cards,by='name',direction='asc',counts=new Map()){
   return result*sign||collator.compare(a.card.name,b.card.name);
  }).map(row=>row.card);
 }
-const api={groups,art,tile,groupName,recommendation,pendingDecisions,search,compileSearch,inventory,sortCollection};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.ForageCards=api;
+const api={groups,boardGroups,swapCategoryNames,art,tile,groupName,recommendation,pendingDecisions,search,compileSearch,inventory,sortCollection};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.ForageCards=api;
 })(typeof window!=='undefined'?window:globalThis);

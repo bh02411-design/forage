@@ -160,8 +160,12 @@ def auto_categorize_card(deck,card,include_manual=False):
     return bool(label and card['group']!=previous)
 
 # Primary presentation categories are separate from overlapping analytical roles.
+def swap_category_names(deck):
+    saved=deck.get('swap_categories') or {}
+    return {'in':saved.get('in','Swap In'),'out':saved.get('out','Swap Out')}
+
 def category_names(deck):
-    return sorted(set(deck.get('categories',[])) | {c.get('group') or ('Commander' if c.get('zone')=='commander' else 'Uncategorized') for c in deck['cards']},key=str.casefold)
+    return sorted(set(swap_category_names(deck).values()) | set(deck.get('categories',[])) | {c.get('group') or ('Commander' if c.get('zone')=='commander' else 'Uncategorized') for c in deck['cards']},key=str.casefold)
 
 def category_label(value):
     if not isinstance(value,str) or not value.strip():raise ValueError('Enter a category name.')
@@ -200,7 +204,11 @@ def normalize_category_changes(deck,changes):
     return normalized
 
 def _perform_category_change(deck,item):
-    categories=set(category_names(deck));action=item['action']
+    categories=set(category_names(deck));action=item['action'];pins=swap_category_names(deck)
+    if action=='delete' and item['from'] in pins.values():raise ValueError('Swap categories stay pinned. Move or remove their cards instead.')
+    if action in ['rename','merge'] and item['from'] in pins.values():
+        if item['to'] in pins.values() and item['to']!=item['from']:raise ValueError('Swap In and Swap Out must remain separate categories.')
+        deck['swap_categories']={side:item['to'] if name==item['from'] else name for side,name in pins.items()}
     if action in ['create','move','rename','merge']:categories.add(item['to'])
     if action in ['rename','merge']:
         for c in deck['cards']:
@@ -217,7 +225,7 @@ def _perform_category_change(deck,item):
 
 def apply_category_changes(deck,changes,plan_id=None):
     normalized=normalize_category_changes(deck,changes)  # Atomic validation before mutation.
-    before=copy.deepcopy(deck['cards']);before_categories=copy.deepcopy(deck.get('categories'))
+    before=copy.deepcopy(deck['cards']);before_categories=copy.deepcopy(deck.get('categories'));before_swap_categories=copy.deepcopy(deck.get('swap_categories'))
     for item in normalized:_perform_category_change(deck,item)
     parts=[]
     for item in normalized:
@@ -225,7 +233,7 @@ def apply_category_changes(deck,changes,plan_id=None):
         elif item['action']=='move':parts.append('Move '+', '.join(item['cards'])+' → '+item['to'])
         elif item['action']=='create':parts.append('Create category '+item['to'])
         else:parts.append('Remove empty category '+item['from'])
-    deck['history'].append({'id':uid(),'type':'category','summary':'; '.join(parts),'before':before,'before_categories':before_categories,'category_plan_id':plan_id})
+    deck['history'].append({'id':uid(),'type':'category','summary':'; '.join(parts),'before':before,'before_categories':before_categories,'before_swap_categories':before_swap_categories,'category_plan_id':plan_id})
     return normalized
 
 def normalize_workspace_changes(deck,changes):
@@ -275,8 +283,8 @@ def apply_workspace_plan(deck,categories,changes,plan_id=None):
                     if 'group' in c['fields']:card['category_manual']=True
                     elif c['fields'].get('zone') in ['main','maybe']:auto_categorize_card(probe,card)
         elif c['action']=='set_view':probe.setdefault('view_settings',{}).update(c['fields'])
-    history={'id':uid(),'type':'workspace','summary':'Apply '+str(len(cats)+len(edits))+' category / workspace changes','before':copy.deepcopy(deck['cards']),'before_categories':copy.deepcopy(deck.get('categories')),'before_name':deck['name'],'before_view_settings':copy.deepcopy(deck.get('view_settings')),'category_plan_id':plan_id}
-    for k in ['cards','categories','name','view_settings']:
+    history={'id':uid(),'type':'workspace','summary':'Apply '+str(len(cats)+len(edits))+' category / workspace changes','before':copy.deepcopy(deck['cards']),'before_categories':copy.deepcopy(deck.get('categories')),'before_swap_categories':copy.deepcopy(deck.get('swap_categories')),'before_name':deck['name'],'before_view_settings':copy.deepcopy(deck.get('view_settings')),'category_plan_id':plan_id}
+    for k in ['cards','categories','name','view_settings','swap_categories']:
         if k in probe:deck[k]=probe[k]
     deck['history'].append(history)
     return cats,edits

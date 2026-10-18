@@ -2,7 +2,7 @@ const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
 const source=fs.readFileSync('static/app.js','utf8');
 const cards=[{id:'a',name:'Same',qty:2,zone:'main',group:'Draw'},{id:'b',name:'Same',qty:1,zone:'maybe',group:'Draw'},{id:'c',name:'Locked',qty:1,zone:'main',group:'Draw',protected:true}];
 const elements={},checks=cards.map(c=>({value:c.id,checked:false}));let markup='',payload;
-const context={deck:()=>({cards}),esc:s=>String(s),modal:(_,html)=>{markup=html},$:s=>elements[s]??=( {} ),$$:s=>s.endsWith(':checked')?checks.filter(c=>c.checked):checks,allCategoryNames:()=>['Draw'],run:fn=>fn(),mutate:async(path,data)=>{payload={path,...data}},closeModal:()=>{},toast:()=>{}};
+const context={ForageCards:require('../static/card-view.js'),deck:()=>({cards}),esc:s=>String(s),modal:(_,html)=>{markup=html},$:s=>elements[s]??=( {} ),$$:s=>s.endsWith(':checked')?checks.filter(c=>c.checked):checks,allCategoryNames:()=>['Draw'],run:fn=>fn(),mutate:async(path,data)=>{payload={path,...data}},closeModal:()=>{},toast:()=>{}};
 vm.createContext(context);vm.runInContext(source.slice(source.indexOf('function categoryDialog(name){'),source.indexOf('function allCategoryNames()')),context);
 context.categoryDialog('Draw');
 assert.match(markup,/Mainboard/);assert.match(markup,/Considering/);assert.match(markup,/×2/);
