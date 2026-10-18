@@ -191,3 +191,6 @@ dialog.card-modal{width:min(1180px,96vw);max-width:96vw;max-height:94vh}
  .sidebar-collapsed .sidebar-toggle{right:20px}
 }
 @media(max-width:900px){.sidebar-toggle{display:none}}
+
+.chat-header-actions{flex-wrap:wrap;justify-content:flex-end}
+.conversation>.panel-head{height:auto;min-height:59px;padding-top:10px;padding-bottom:10px;flex-wrap:wrap}

@@ -296,7 +296,14 @@ $('#sort-cards').onchange=e=>{sortBy=e.target.value;uiSave('sortBy',sortBy);rend
 const savedSize=Math.max(145,Math.min(255,Number(uiRead('cardSize','175'))||175));
 $('#card-size').value=savedSize;document.documentElement.style.setProperty('--card-width',savedSize+'px');
 $('#card-size').oninput=e=>{document.documentElement.style.setProperty('--card-width',e.target.value+'px');uiSave('cardSize',e.target.value)};
-$('#focus-deck').onclick=()=>{deckExpanded=!deckExpanded;$('.workspace').classList.toggle('deck-expanded',deckExpanded);$('#focus-deck').textContent=deckExpanded?'Show conversation ↙':'Expand deck ↗';$('#focus-deck').setAttribute('aria-pressed',String(deckExpanded));hideCardHover();if(!deckExpanded)renderChat(true)};
+function setChatCollapsed(collapsed){
+ deckExpanded=collapsed;$('.workspace').classList.toggle('deck-expanded',collapsed);
+ const button=$('#focus-deck');button.textContent=collapsed?'Show chat ↙':'Hide chat ↗';
+ button.setAttribute('aria-pressed',String(collapsed));button.setAttribute('aria-expanded',String(!collapsed));
+ $('#collapse-chat').setAttribute('aria-expanded',String(!collapsed));
+}
+$('#focus-deck').onclick=()=>{setChatCollapsed(!deckExpanded);hideCardHover();if(!deckExpanded)renderChat(true)};
+$('#collapse-chat').onclick=()=>{$('#focus-deck').focus();$('#focus-deck').click()};
 $$('[data-collection-mode]').forEach(b=>b.onclick=()=>{collectionMode=b.dataset.collectionMode;uiSave('collectionMode',collectionMode);renderCollection()});
 $('#collection-sort').onchange=e=>{collectionSort=e.target.value;uiSave('collectionSort',collectionSort);collectionLimit=60;renderCollection()};
 $('#collection-direction').onchange=e=>{collectionDirection=e.target.value;uiSave('collectionDirection',collectionDirection);collectionLimit=60;renderCollection()};
@@ -334,7 +341,7 @@ function syncViewSettings(){
  cardMode=v.card_mode||uiRead('cardMode','stacks');groupBy=v.group_by||uiRead('groupBy','category');sortBy=v.sort_by||uiRead('sortBy','name');
  const size=v.card_size||Math.max(145,Math.min(255,Number(uiRead('cardSize','175'))||175));$('#card-size').value=size;document.documentElement.style.setProperty('--card-width',size+'px');
  deckExpanded=typeof v.deck_expanded==='boolean'?v.deck_expanded:false;
- $('.workspace').classList.toggle('deck-expanded',deckExpanded);$('#focus-deck').textContent=deckExpanded?'Show conversation ↙':'Expand deck ↗';$('#focus-deck').setAttribute('aria-pressed',String(deckExpanded));
+ setChatCollapsed(deckExpanded);
 }
 function persistView(fields){run(()=>mutate('view',{settings:fields}))}
 $('#auto-categorize').onclick=()=>run(async()=>{

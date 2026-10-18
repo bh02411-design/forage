@@ -74,6 +74,10 @@ History uses published releases from your configured GitHub repository. Cached h
 
 ### Changelog
 
+**0.2.30**
+
+- Hide chat from its header or the board toolbar to give the board full width. Reopen with Show chat. Uses the saved per-deck view preference and restores the latest conversation when reopened.
+
 **0.2.29**
 
 - Remove Mainboard/Considering labels from cards in shared Swap In and Swap Out categories and their category editor. Present the section as Swap staging, separate from both board totals.

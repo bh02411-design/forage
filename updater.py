@@ -11,6 +11,7 @@ MAX_PACKAGE=20*1024*1024
 
 # Release notes stay in an existing updater file so older installers accept the package.
 CHANGELOG={
+ '0.2.30':['Add an explicit Hide chat control in the conversation header and Show chat on the visual board.','Reuse the saved per-deck expanded view so collapsing chat gives the board full width and restores the latest conversation when reopened.'],
  '0.2.29':['Remove board-origin labels from shared swap cards and their category editor.','Present Swap In and Swap Out as a shared staging area excluded from board totals.'],
  '0.2.28':['Exclude shared Swap In and Swap Out categories from both board totals, including renamed categories.','Keep staging counts visible and align deck size, curve, roles and mana statistics with the unstaged mainboard.'],
  '0.2.27':['Add a collapsible desktop sidebar with accessible icon navigation and a remembered preference.','Keep the full horizontal navigation available on smaller screens.'],

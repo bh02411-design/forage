@@ -164,3 +164,12 @@ console.log('8 pending-decision header/layout checks passed.');
  assert.equal(restored.attributes['aria-expanded'],'true');assert.equal(restored.button.title,'Collapse sidebar');
  console.log('Sidebar startup, persistence, navigation state and toggle checks passed.');
 }
+
+{
+ const nodes={},classes=new Set(),attributes={},ctx={deckExpanded:false,$:s=>nodes[s]??=( {setAttribute:(k,v)=>{(attributes[s]??={})[k]=v}} )};
+ nodes['.workspace']={classList:{toggle:(k,on)=>on?classes.add(k):classes.delete(k)}};
+ vm.createContext(ctx);vm.runInContext(app.slice(app.indexOf('function setChatCollapsed('),app.indexOf("$('#focus-deck').onclick=")),ctx);
+ ctx.setChatCollapsed(true);assert.ok(classes.has('deck-expanded'));assert.equal(nodes['#focus-deck'].textContent,'Show chat ↙');assert.equal(attributes['#focus-deck']['aria-expanded'],'false');
+ ctx.setChatCollapsed(false);assert.ok(!classes.has('deck-expanded'));assert.equal(nodes['#focus-deck'].textContent,'Hide chat ↗');assert.equal(attributes['#collapse-chat']['aria-expanded'],'true');
+ console.log('Chat collapse and reopen controls stay synchronized with accessible state.');
+}
