@@ -74,6 +74,10 @@ History uses published releases from your configured GitHub repository. Cached h
 
 ### Changelog
 
+**0.2.25**
+
+- Move Mana cost vs production, including Optimize basics, above the mana curve and role panels.
+
 **0.2.24**
 
 - Add the branded green Forage favicon to browser tabs. The scalable icon is bundled directly in the page and matches the Windows tray mark.
