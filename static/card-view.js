@@ -20,8 +20,12 @@ function groups(cards,by='category',sort='name'){
  for(const [,list] of entries)list.sort((a,b)=>sort==='mana'?((a.mv??1000)-(b.mv??1000)||a.name.localeCompare(b.name)):a.name.localeCompare(b.name));return entries;
 }
 function swapCategoryNames(deck){return {in:deck.swap_categories?.in||'Swap In',out:deck.swap_categories?.out||'Swap Out'}}
-function boardGroups(cards,by='category',sort='name',deck={},mainboard=true){
- if(!mainboard)return {main:groups(cards,by,sort),swaps:[]};
+function onBoard(card,zone){return zone==='main'?['main','commander'].includes(card.zone):card.zone==='maybe'}
+function boardCards(deck,zone){
+ const shared=Object.values(swapCategoryNames(deck));
+ return (deck.cards||[]).filter(c=>onBoard(c,zone)||(['main','maybe'].includes(c.zone)&&shared.includes(c.group)));
+}
+function boardGroups(cards,by='category',sort='name',deck={}){
  const pins=swapCategoryNames(deck),names=Object.values(pins);
  const ordinary=cards.filter(c=>c.zone==='commander'||!names.includes(c.group));
  const swaps=names.map(name=>[name,cards.filter(c=>c.zone!=='commander'&&c.group===name).sort((a,b)=>sort==='mana'?((a.mv??1000)-(b.mv??1000)||a.name.localeCompare(b.name)):a.name.localeCompare(b.name))]);
@@ -138,5 +142,5 @@ function sortCollection(cards,by='name',direction='asc',counts=new Map()){
   return result*sign||collator.compare(a.card.name,b.card.name);
  }).map(row=>row.card);
 }
-const api={groups,boardGroups,swapCategoryNames,art,tile,groupName,recommendation,pendingDecisions,search,compileSearch,inventory,sortCollection};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.ForageCards=api;
+const api={groups,onBoard,boardCards,boardGroups,swapCategoryNames,art,tile,groupName,recommendation,pendingDecisions,search,compileSearch,inventory,sortCollection};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.ForageCards=api;
 })(typeof window!=='undefined'?window:globalThis);

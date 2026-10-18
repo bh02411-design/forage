@@ -55,21 +55,21 @@ function syntaxKey(where){
 }
 function renderDeck(){
  $('#auto-categorize').title='Categorize unassigned cards on '+(zone==='main'?'Mainboard':'Considering');
- const filter=$('#deck-search').value,board=deck().cards.filter(c=>zone==='main'?['main','commander'].includes(c.zone):c.zone==='maybe');
+ const filter=$('#deck-search').value,board=ForageCards.boardCards(deck(),zone);
  const result=ForageCards.search(board,filter),visible=new Set(result.matches.map(c=>c.id));
  const cards=board.filter(c=>c.zone==='commander'||visible.has(c.id));
  filterStatus('deck',result,filter,zone==='main'&&board.some(c=>c.zone==='commander'&&!visible.has(c.id)));
- $('#card-count').textContent=cards.reduce((a,c)=>a+c.qty,0)+' cards';
- const arranged=ForageCards.boardGroups(cards,groupBy,sortBy,deck(),zone==='main'),entries=arranged.main;
- const swapPanel=$('#swap-categories');swapPanel.hidden=zone!=='main';swapPanel.className='swap-categories mode-'+cardMode;
+ $('#card-count').textContent=cards.filter(c=>ForageCards.onBoard(c,zone)).reduce((a,c)=>a+c.qty,0)+' cards';
+ const arranged=ForageCards.boardGroups(cards,groupBy,sortBy,deck()),entries=arranged.main;
+ const swapPanel=$('#swap-categories');swapPanel.hidden=false;swapPanel.className='swap-categories mode-'+cardMode;
  $('#deck-list').className='deck-list card-board mode-'+cardMode;
  const groupMarkup=([g,list],swap=false)=>{
   const pinned=list.length>0&&list.every(c=>c.zone==='commander');
   const heading=pinned?'<span title="Commander position is fixed first">Commander · pinned</span>':(swap||groupBy==='category')?`<button class="category-heading" data-edit-category="${esc(g)}" title="Edit category">${esc(g)} <span class="edit-pencil">✎</span></button>`:esc(g);
-  return `<section class="visual-group${pinned?' commander-group':''}" ${pinned?'data-pinned-commander="true"':`data-drop-group="${esc(g)}"`}><div class="group-label">${heading}<span>${list.reduce((n,c)=>n+c.qty,0)}</span></div><div class="group-cards">`+list.map(c=>cardMode==='list'?`<button class="card-row" draggable="true" data-visual-card="${esc(c.id)}" data-card-source="deck"><span class="qty">${c.qty}</span><span class="card-name">${esc(c.name)}</span>${c.protected?'<span class="lock" title="Protected card">◆</span>':''}<span class="card-mv">${c.land?'◇':c.mv??'?'}</span></button>`:ForageCards.tile(c,state.collection)).join('')+'</div></section>';
+  return `<section class="visual-group${pinned?' commander-group':''}" ${pinned?'data-pinned-commander="true"':`data-drop-group="${esc(g)}"`}><div class="group-label">${heading}<span>${list.reduce((n,c)=>n+c.qty,0)}</span></div><div class="group-cards">`+list.map(c=>{const markup=cardMode==='list'?`<button class="card-row" draggable="true" data-visual-card="${esc(c.id)}" data-card-source="deck"><span class="qty">${c.qty}</span><span class="card-name">${esc(c.name)}</span>${c.protected?'<span class="lock" title="Protected card">◆</span>':''}<span class="card-mv">${c.land?'◇':c.mv??'?'}</span></button>`:ForageCards.tile(c,state.collection);return swap?`<div class="swap-card-entry"><span class="swap-origin">${c.zone==='maybe'?'Considering':'Mainboard'}</span>${markup}</div>`:markup}).join('')+'</div></section>';
  };
  $('#deck-list').innerHTML=entries.map(entry=>groupMarkup(entry)).join('')||'<div class="empty">Nothing here yet.<br>Import a list or drop a card.</div>';
- swapPanel.innerHTML=zone==='main'?'<div class="swap-panel-heading">PINNED CATEGORIES</div>'+arranged.swaps.map(entry=>groupMarkup(entry,true)).join(''):'';
+ swapPanel.innerHTML='<div class="swap-panel-heading">SHARED CATEGORIES</div>'+arranged.swaps.map(entry=>groupMarkup(entry,true)).join('');
  $$('[data-card-mode]').forEach(b=>{b.classList.toggle('selected',b.dataset.cardMode===cardMode);b.setAttribute('aria-pressed',String(b.dataset.cardMode===cardMode))});
  $('#group-cards').value=groupBy;$('#sort-cards').value=sortBy;
  if(cardMode==='stacks')$('#deck-list').innerHTML='<div class="stack-columns">'+$('#deck-list').innerHTML+'</div>';
@@ -103,6 +103,9 @@ function hideCardHover(){$('#card-hover').hidden=true}
 async function internalDrop(item,destination,category=null){
  if(item.deck!==state.active)throw Error('Switch back to the source deck before moving this card.');
  const c=findVisualCard(item.id,item.source);if(!c)throw Error('This card changed. Refresh and try again.');
+ const shared=category&&Object.values(ForageCards.swapCategoryNames(deck())).includes(category);
+ if(shared&&c.zone==='commander'&&item.source!=='collection')throw Error('Your commander stays pinned in its own section.');
+ if(shared)destination=item.source==='collection'?'maybe':c.zone;
  if(item.source==='collection'){
   const newCard={...c};if(category&&category!=='Commander')newCard.group=category;
   await mutate('card',{action:'add',card:newCard,zone:category==='Commander'?'commander':destination});toast('Card added. Ownership quantity was unchanged.');

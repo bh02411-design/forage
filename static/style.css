@@ -160,3 +160,7 @@ dialog.card-modal{width:min(1180px,96vw);max-width:96vw;max-height:94vh}
 @media(max-width:760px){.card-modal .card-detail{grid-template-columns:minmax(0,1fr);gap:20px}.card-detail-art{position:static;width:min(360px,100%);justify-self:center}.card-modal .card-detail-art img{max-height:65vh}.card-modal .oracle{font-size:13px}}
 
 .model-diagnostic{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;max-height:400px;overflow:auto}
+
+.swap-origin{display:block;font-size:9px;color:var(--muted);padding:5px 2px 4px}
+.swap-categories.mode-stacks .swap-card-entry:not(:last-child) .card-visual{height:34px;border-radius:8px 8px 0 0;border-bottom:0}
+.swap-card-entry{margin-bottom:6px}

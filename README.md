@@ -74,6 +74,12 @@ History uses published releases from your configured GitHub repository. Cached h
 
 ### Changelog
 
+**0.2.22**
+
+- Show the same pinned Swap In and Swap Out cards on Mainboard and Considering, with source-board labels.
+- Moving existing cards into the shared categories preserves their board assignment. Collection drops into these categories enter Considering; moving a card explicitly to a board tab still changes its assignment.
+- Board counts include only cards actually assigned to the selected board. Ordinary categories remain scoped to that board; shared categories retain normal editing and Undo.
+
 **0.2.21**
 
 - Use a focused prompt for cut reviews. Accept clear numbered/bulleted removal lists, tables and common structured field aliases; validate the resulting candidates normally.
