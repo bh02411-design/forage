@@ -74,6 +74,10 @@ History uses published releases from your configured GitHub repository. Cached h
 
 ### Changelog
 
+**0.2.32**
+
+- Show total copies to sleeve and the number of marked entries at the top of the physical deck checklist. Totals update as entries are marked done.
+
 **0.2.31**
 
 - Mark Needs sleeving in card details and save to track physical deck additions. Badges appear on marked cards; use Needs sleeving only or Physical deck checklist to find them.

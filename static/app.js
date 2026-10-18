@@ -26,7 +26,8 @@ const mainCards=()=>ForageCards.countedBoardCards(deck(),'main');
 $('#needs-sleeving-only').onchange=renderDeck;
 function physicalDeckChecklist(){
  const cards=deck().cards.filter(c=>c.needs_sleeving).sort((a,b)=>a.name.localeCompare(b.name));
- modal('Physical deck checklist',`<p class="modal-note">Cards you marked as needing sleeving. Mark each done after adding it to your physical deck. Markers are saved with this deck; they do not change categories or board totals. Each marker applies to all copies in that entry.</p>${cards.map(c=>`<div class="sleeving-checklist-row"><span>${esc(c.name)} ×${c.qty}<small class="muted">${esc(c.group||'Uncategorized')}</small></span><button class="button secondary" data-sleeved="${esc(c.id)}">Done · sleeved</button></div>`).join('')||'<p class="muted">Nothing waiting. Click a card and check Needs sleeving, then save.</p>'}`);
+ const total=cards.reduce((n,c)=>n+c.qty,0);
+ modal('Physical deck checklist',`<p class="sleeving-total" role="status"><strong>${total} ${total===1?'card':'cards'} to sleeve</strong> <span class="muted">· ${cards.length} ${cards.length===1?'entry':'entries'}</span></p><p class="modal-note">Cards you marked as needing sleeving. Mark each done after adding it to your physical deck. Markers are saved with this deck; they do not change categories or board totals. Each marker applies to all copies in that entry.</p>${cards.map(c=>`<div class="sleeving-checklist-row"><span>${esc(c.name)} ×${c.qty}<small class="muted">${esc(c.group||'Uncategorized')}</small></span><button class="button secondary" data-sleeved="${esc(c.id)}">Done · sleeved</button></div>`).join('')||'<p class="muted">Nothing waiting. Click a card and check Needs sleeving, then save.</p>'}`);
  $$('[data-sleeved]').forEach(b=>b.onclick=()=>run(async()=>{await mutate('card',{id:b.dataset.sleeved,action:'edit',needs_sleeving:false});physicalDeckChecklist()}));
 }
 $('#physical-deck-checklist').onclick=physicalDeckChecklist;
