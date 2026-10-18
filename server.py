@@ -388,6 +388,21 @@ def fit_messages(messages,budget,question):
                 except ValueError:continue
                 data=search_prompt(data,cap);data['context_note']='Rows reduced for context. Narrow the query for more matches; no exhaustive ranking is implied.'
                 m['content']=prefix+json.dumps(data,ensure_ascii=False,separators=(',',':'))
+    # A large Considering board can make even a stripped object-per-card roster
+    # exceed the limit. Encode repeated field names once before touching history.
+    if not fits() and ctx is not None:
+        cards=ctx.get('cards',[])
+        columns=['name','qty','zone','mv','group','roles','protected']
+        ctx['card_roster_columns']=columns
+        ctx['card_roster']=[[c.get(field) for field in columns] for c in cards]
+        ctx['cards']=[c for c in cards if c.get('zone')=='commander' or c.get('name','').lower() in question.lower()]
+        ctx['context_note']='card_roster contains EVERY deck entry as rows using card_roster_columns; null means unknown. cards contains selected detailed facts only, not the whole deck. Considering (maybe) is not Mainboard and cannot be proposed as a cut. Missing Oracle text is unknown; exact-name collection_search can retrieve stored deck facts. Full saved data is unchanged.'
+        ctx['decisions']=[{k:d.get(k) for k in ['add','cut','status']} for d in ctx.get('decisions',[])]
+        # Pending plans can contain hundreds of names and verbose explanations.
+        # Keep their identity/status; they remain available in the decisions UI.
+        ctx['pending_category_plans']=[{'id':p.get('id'),'status':p.get('status'),'details_omitted':True} for p in ctx.get('pending_category_plans',[])]
+        ctx.pop('view_settings',None);ctx.pop('deck_source',None)
+        save_context()
     # Preserve recent role-aware turns; remove older turns only after data compaction.
     def history_indexes():return [i for i in range(1,current) if out[i].get('role')!='system']
     while not fits() and len(history_indexes())>4:
@@ -399,13 +414,16 @@ def fit_messages(messages,budget,question):
         for i in history_indexes():out[i]['content']=excerpt(out[i]['content'],cap)
     while not fits() and len(history_indexes())>2:
         victim=history_indexes()[0];del out[victim];current-=1
-    if not fits():raise ValueError('The prompt still exceeds the available budget after trimming reference data. Nothing was deleted. For a normal card search this indicates an unusually large saved preference, rules note or message; inspect Context used or shorten that specific text. The current question and latest conversation exchange were preserved.')
+    if not fits():raise ValueError(f'Forage could not fit the request into its context budget ({prompt_size(out):,} bytes after compaction; {budget:,} allowed). This is a context-packaging limit, not a problem with your question. Nothing was deleted. The current question and latest conversation exchange were preserved.')
     return out
 
 def prompt_trace(packed,question):
-    marker='\nWORKSPACE DATA:\n';anchors={}
+    marker='\nWORKSPACE DATA:\n';anchors={};coverage={}
     if packed and marker in str(packed[0].get('content','')):
-        try:anchors=json.JSONDecoder().raw_decode(packed[0]['content'].split(marker,1)[1])[0].get('conversation_context',{})
+        try:
+            workspace=json.JSONDecoder().raw_decode(packed[0]['content'].split(marker,1)[1])[0]
+            anchors=workspace.get('conversation_context',{})
+            coverage={'deck_entries':len(workspace.get('card_roster',workspace.get('cards',[]))),'roster_encoding':'rows' if 'card_roster' in workspace else 'objects','detailed_cards':sum(bool(c.get('oracle_text')) for c in workspace.get('cards',[]))}
         except ValueError:pass
     recent=[]
     for m in packed:
@@ -414,7 +432,7 @@ def prompt_trace(packed,question):
         if isinstance(content,list):content=next((p.get('text','') for p in content if p.get('type')=='text'),'')
         if content==question:break
         recent.append({'role':m['role'],'text':content})
-    return {'recent_messages':recent,'conversation_context':anchors,'request_bytes':prompt_size(packed),'note':'This is conversation context actually included in the latest model request. Full saved history is unchanged. Byte size is not an exact token count.'}
+    return {'recent_messages':recent,'conversation_context':anchors,'workspace_coverage':coverage,'request_bytes':prompt_size(packed),'note':'This is conversation context actually included in the latest model request. Full saved history is unchanged. Byte size is not an exact token count.'}
 
 def predict_with_budget(base,model,messages,question,budget_state):
     output_tokens=1800

@@ -46,6 +46,40 @@ class ResolvedPromptTests(unittest.TestCase):
             result=server.ai_chat(self.state,self.deck,self.question)
         self.assertEqual(model.call_count,1);self.assertIn('Compare',result['reply'])
         sent=model.call_args.args[1]['messages'];self.assertLessEqual(server.prompt_size(sent),30000)
+    def test_large_considering_roster_reproduces_cut_request_and_fits(self):
+        self.question='please give me 5 cards you would recommend swapping out for card draw'
+        for i in range(66):
+            c=copy.deepcopy(self.deck['cards'][1]);c.update(name='Resolved Considering Card '+str(i),zone='maybe',roles=['Draw: reliable card advantage','Recursion: creature recursion','Sac Outlets: sacrifice artifact or creature','Tokens: create creature tokens']);self.deck['cards'].append(c)
+        messages=self.messages();before=copy.deepcopy(messages)
+        packed=server.fit_messages(messages,30000,self.question)
+        self.assertLessEqual(server.prompt_size(packed),30000);self.assertEqual(messages,before)
+        ctx=json.loads(packed[0]['content'].split('\nWORKSPACE DATA:\n')[1])
+        self.assertEqual(len(ctx['card_roster']),166)
+        columns=ctx['card_roster_columns'];rows=[dict(zip(columns,row)) for row in ctx['card_roster']]
+        self.assertEqual({c['name'] for c in rows},{c['name'] for c in self.deck['cards']})
+        self.assertEqual(sum(c['zone']=='maybe' for c in rows),66)
+        self.assertEqual(rows[1]['protected'],True);self.assertEqual(rows[-1]['roles'],self.deck['cards'][-1]['roles'])
+        self.assertTrue(any(c['zone']=='commander' for c in ctx['cards']));self.assertTrue(ctx['preferences'])
+        self.assertTrue(all(any(m['content']==h['text'] for m in packed) for h in self.deck['chat']))
+        self.assertEqual(packed[-1]['content'],self.question)
+        trace=server.prompt_trace(packed,self.question);self.assertEqual(trace['workspace_coverage']['deck_entries'],166)
+    def test_large_pending_plan_is_compacted_before_latest_exchange(self):
+        self.deck['category_plans']=[{'id':'large-plan','status':'pending','changes':[{'action':'move','cards':['Considering '+str(i) for i in range(100)],'to':'Draw','reason':'Detailed explanation. '*1000}]}]
+        self.deck['proposals']=[{'add':'Owned Draw 1','cut':'Resolved Deck Card 1','status':'accepted','feedback':'Long saved feedback. '*300,'reason':'Long reason. '*300} for i in range(8)]
+        messages=self.messages();before=copy.deepcopy(messages)
+        packed=server.fit_messages(messages,30000,self.question)
+        self.assertLessEqual(server.prompt_size(packed),30000);self.assertEqual(messages,before)
+        ctx=json.loads(packed[0]['content'].split('\nWORKSPACE DATA:\n')[1])
+        self.assertEqual(ctx['pending_category_plans'][0],{'id':'large-plan','status':'pending','details_omitted':True})
+        self.assertTrue(all(any(m['content']==h['text'] for m in packed) for h in self.deck['chat']))
+    def test_large_roster_reaches_model_with_current_question(self):
+        self.question='please give me 5 cards you would recommend swapping out for card draw'
+        for i in range(90):
+            c=copy.deepcopy(self.deck['cards'][1]);c.update(name='Large Considering '+str(i),zone='maybe');self.deck['cards'].append(c)
+        with patch.object(server,'request_json',return_value={'choices':[{'message':{'content':'{"reply":"Review the supplied mainboard.","proposals":[],"recommendation_limitations":"This test checks packing, not recommendations."}'}}]}) as model:
+            result=server.ai_chat(self.state,self.deck,self.question)
+        self.assertEqual(model.call_count,1);self.assertIn('Review',result['reply'])
+        self.assertEqual(model.call_args.args[1]['messages'][-1]['content'],self.question)
     def test_range_filters_before_prompt(self):
         result=server.collection_search(self.state,self.deck,self.question)
         self.assertEqual(result['mana_value_filter'],{'min':2,'max':3})

@@ -74,6 +74,12 @@ History uses published releases from your configured GitHub repository. Cached h
 
 ### Changelog
 
+**0.2.18**
+
+- Add compact roster rows for large Mainboard/Considering prompts, retaining all entries, mana values, roles, categories, quantities and protection flags.
+- Reduce pending-plan and decision detail before shortening conversation; preserve the current question and latest exchange. Saved data stays unchanged.
+- Correct misleading prompt-budget errors and add roster coverage to context diagnostics.
+
 **0.2.17**
 
 - Fix manually created Uncategorized categories blocking the Auto-categorize button. Explicit auto-categorizing resets unassigned categories; automatic board entry continues to preserve manual choices.
