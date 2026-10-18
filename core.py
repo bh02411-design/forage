@@ -307,3 +307,106 @@ def remove_selected_cards(deck, ids, category):
     before=copy.deepcopy(deck['cards'])
     deck['cards']=[c for c in deck['cards'] if c['id'] not in wanted]
     deck['history'].append({'id':uid(),'type':'card','summary':'Remove selected cards: '+str(len(selected))+' entries from '+category,'before':before})
+
+# Basic-land balancing is a transparent heuristic, not a casting probability model.
+BASIC_LANDS={'W':'Plains','U':'Island','B':'Swamp','R':'Mountain','G':'Forest'}
+
+def basic_land_plan(state,deck,early=True):
+    import hashlib,json
+    if not isinstance(early,bool):raise ValueError('Early-spell weighting must be true or false.')
+    active=[c for c in deck['cards'] if c.get('zone') in ['main','commander']]
+    fingerprint=hashlib.sha256(json.dumps({'cards':active,'early':early,'collection_only':state['settings'].get('collection_only',True),'available':{n:availability(state,n,deck['id'])['available'] for n in BASIC_LANDS.values()}},sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    current={color:0 for color in BASIC_LANDS};locked=dict(current);pips=dict(current);weighted=dict(current);fixed=dict(current)
+    by_name={key(name):color for color,name in BASIC_LANDS.items()}
+    warnings=[];blocking=[];unknown_costs=[];unknown_lands=[];conditional=[];mdfcs=[];colorless=0
+    commanders=[c for c in active if c.get('zone')=='commander']
+    identity_known=bool(commanders) and all(isinstance(c.get('color_identity'),list) for c in commanders)
+    allowed=set(x for c in commanders for x in (c.get('color_identity') or [])) if identity_known else set(BASIC_LANDS)
+    if commanders and not identity_known:blocking.append('Resolve commander color identity before applying a basic-land mix.')
+    if not commanders:warnings.append('No commander assigned; allowed colors are inferred from colored casting costs.')
+    for c in active:
+        qty=c['qty'];name=c['name'];color=by_name.get(key(name))
+        if c.get('zone')=='main' and color:
+            current[color]+=qty
+            if c.get('protected'):locked[color]+=qty;fixed[color]+=qty
+            continue
+        if c.get('mdfc') and not c.get('land'):mdfcs.append(name)
+        if c.get('land') or (re.search(r'\bLand\b',c.get('type_line') or '') and not c.get('mdfc')):
+            # Preserve snow basics and Wastes as fixed sources, including name-only imports.
+            snow=next((v for k,v in by_name.items() if key(name)==key('Snow-Covered '+BASIC_LANDS[v])),None)
+            if snow:fixed[snow]+=qty;continue
+            if key(name)==key('Wastes'):continue
+            text=c.get('oracle_text') or '';typ=c.get('type_line') or ''
+            types={color for color,basic in BASIC_LANDS.items() if re.search(r'\b'+basic+r'\b',typ)}
+            lines=[line.split(':',1)[1] for line in text.splitlines() if ':' in line and re.search(r'\badd\b',line.split(':',1)[1],re.I)]
+            output=' '.join(lines)
+            uncertain=bool(re.search(r'could produce|opponent|spend this mana only|activate only|search your library',text,re.I))
+            sources=set(types)
+            if output and not uncertain:
+                sources.update(re.findall(r'\{([WUBRG])\}',output))
+                if re.search(r'any color',output,re.I):
+                    if identity_known:sources.update(allowed)
+                    else:uncertain=True
+            if uncertain and not types:conditional.append(name)
+            elif not sources and not text:unknown_lands.append(name)
+            elif not sources and not re.search(r'\{C\}|colorless',output,re.I):conditional.append(name)
+            for color in sources:fixed[color]+=qty
+            continue
+        cost=c.get('mana_cost')
+        if cost is None or cost=='' and c.get('mv') not in [0,0.0]:unknown_costs.append(name);continue
+        weight=1+(1/max(float(c.get('mv') or 1),1) if early else 0)
+        for symbol in re.findall(r'\{([^}]+)\}',cost):
+            choices=[v for v in symbol.upper().split('/') if v in BASIC_LANDS]
+            if symbol.upper()=='C':colorless+=qty
+            if not choices:continue
+            for color in choices:
+                share=qty/len(choices);pips[color]+=share;weighted[color]+=share*weight
+    total=sum(current.values());pool=total-sum(locked.values());target=dict(locked)
+    if total>500:raise ValueError('Basic-land balancing supports up to 500 ordinary basics.')
+    colors=[c for c in BASIC_LANDS if c in allowed and weighted[c]>0]
+    if not colors:
+        target=dict(current);blocking.append('No usable colored casting-cost demand was found. Resolve card data before optimizing.')
+    else:
+        # Ensure an otherwise unsupported splash has at least one basic when slots permit.
+        unsupported=sorted((c for c in colors if fixed[c]==0),key=lambda c:(-weighted[c],list(BASIC_LANDS).index(c)))
+        if pool>=len(unsupported):
+            for color in unsupported:target[color]+=1;pool-=1
+        for _ in range(pool):
+            color=max(colors,key=lambda c:(weighted[c]/(fixed[c]+target[c]-locked[c]+1),int(target[c]<current[c]),-list(BASIC_LANDS).index(c)))
+            target[color]+=1
+    if not total:blocking.append('There are no ordinary basic lands to redistribute. Add basics first; this tool does not change your land count.')
+    if unknown_costs:blocking.append(str(len(unknown_costs))+' spell entries lack casting-cost metadata. Resolve card data before applying.')
+    if unknown_lands:blocking.append(str(len(unknown_lands))+' nonbasic land entries lack source metadata. Resolve card data before applying.')
+    if identity_known and any(weighted[c]>0 and c not in allowed for c in BASIC_LANDS):warnings.append('Some casting costs are outside the commander color identity; basic swaps cannot fix those cards.')
+    if conditional:warnings.append('Lands not credited as unconditional colored sources (including conditional/restricted mana and fetch lands): '+', '.join(sorted(set(conditional))))
+    if mdfcs:warnings.append('MDFC spell-front costs contribute demand; their optional land backs are kept but not credited as guaranteed sources: '+', '.join(sorted(set(mdfcs))))
+    if colorless:warnings.append('Explicit {C} casting requirements remain dependent on your unchanged colorless sources; Wastes is not redistributed.')
+    rows=[]
+    for color,name in BASIC_LANDS.items():
+        stock=availability(state,name,deck['id'])['available']
+        if state['settings'].get('collection_only',True) and target[color]>current[color] and target[color]>stock:blocking.append(name+': '+str(target[color])+' needed, but only '+str(stock)+' copies are confirmed available for this deck.')
+        rows.append({'color':color,'name':name,'current':current[color],'suggested':target[color],'delta':target[color]-current[color],'protected':locked[color],'colored_pips':round(pips[color],2),'weighted_demand':round(weighted[color],2),'fixed_sources':fixed[color],'available':stock})
+    return {'fingerprint':fingerprint,'early':early,'basic_count':total,'rows':rows,'changed':any(r['delta'] for r in rows),'can_apply':not blocking and any(r['delta'] for r in rows),'blocking':blocking,'warnings':warnings,'unknown_costs':unknown_costs,'unknown_lands':unknown_lands,'method':'Greedy weighted source balance: colored casting symbols (hybrid split evenly), with optional weight 1 + 1 / mana value for early spells. Fixed direct land sources and protected basics receive credit before allocating movable basics. Ordinary basic count stays constant. This does not model draw/mulligan probabilities, tapped-land timing, ramp, colored activation costs, phyrexian life payment, or conditional/fetch mana. Nonbasics, snow basics, Wastes and Considering stay unchanged.'}
+
+def apply_basic_land_plan(state,deck,fingerprint,early=True):
+    plan=basic_land_plan(state,deck,early)
+    if fingerprint!=plan['fingerprint']:raise ValueError('The mainboard, optimizer options, or available copies changed. Refresh the land suggestion before applying.')
+    if not plan['can_apply']:raise ValueError('; '.join(plan['blocking']) or 'The basic-land mix already matches the suggestion.')
+    before=copy.deepcopy(deck['cards'])
+    for row in plan['rows']:
+        if not row['delta']:continue
+        name=row['name'];delta=row['delta']
+        movable=[c for c in deck['cards'] if c.get('zone')=='main' and key(c['name'])==key(name) and not c.get('protected')]
+        if delta<0:
+            needed=-delta
+            for c in reversed(movable):
+                take=min(needed,c['qty']);c['qty']-=take;needed-=take
+                if not c['qty']:deck['cards'].remove(c)
+                if not needed:break
+        elif movable:movable[0]['qty']+=delta
+        else:
+            template=next((copy.deepcopy(c) for c in state['collection'] if key(c['name'])==key(name)),make_entry(name,delta))
+            template.update({'id':uid(),'name':name,'qty':delta,'zone':'main','group':next((n for n in category_names(deck) if n in ['Land','Lands']),'Land'),'roles':['Land'],'protected':False,'land':True,'mdfc':False,'mv':0,'mana_cost':'','color_identity':[row['color']],'type_line':'Basic Land — '+name,'oracle_text':'{T}: Add {'+row['color']+'}.'})
+            deck['cards'].append(template)
+    deck['history'].append({'id':uid(),'type':'lands','summary':'Optimize basic-land mix: '+', '.join(r['name']+' '+str(r['current'])+' → '+str(r['suggested']) for r in plan['rows'] if r['delta']),'before':before})
+    return plan

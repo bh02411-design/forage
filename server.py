@@ -3,7 +3,7 @@
 import argparse, base64, copy, datetime, html, json, os, re, secrets, sqlite3, threading, time, urllib.error, urllib.parse, urllib.request, webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from core import swap_category_names, auto_category_candidate, remove_selected_cards, auto_categorize_card, uid, key, parse_import, make_entry, analysis, availability, mana_sample, apply_swap, category_names, normalize_category_changes, apply_category_changes, normalize_workspace_changes, apply_workspace_plan
+from core import basic_land_plan, apply_basic_land_plan, swap_category_names, auto_category_candidate, remove_selected_cards, auto_categorize_card, uid, key, parse_import, make_entry, analysis, availability, mana_sample, apply_swap, category_names, normalize_category_changes, apply_category_changes, normalize_workspace_changes, apply_workspace_plan
 from seed import initial_state
 import updater
 import launcher
@@ -859,6 +859,11 @@ class Handler(BaseHTTPRequestHandler):
                     validate_backup(incoming)
                     backup=DATA/('before-restore-'+datetime.datetime.now().strftime('%Y%m%d-%H%M%S-%f')+'.json')
                     backup.write_text(json.dumps(state),encoding='utf-8');state=incoming
+                elif path=='/api/optimize-basics':
+                    action=payload.get('action','preview');early=payload.get('early',True)
+                    if action=='preview':return self.send_json(basic_land_plan(state,deck,early))
+                    if action!='apply':raise ValueError('Unknown basic-land optimizer action.')
+                    apply_basic_land_plan(state,deck,payload.get('fingerprint'),early)
                 elif path=='/api/sample': return self.send_json(mana_sample(deck))
                 else:raise ValueError('Unknown endpoint.')
                 write_state(state)

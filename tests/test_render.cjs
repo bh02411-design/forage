@@ -113,3 +113,21 @@ console.log('8 pending-decision header/layout checks passed.');
  ctx.modal('Category','Other content');assert.deepEqual(toggles.at(-1),['card-modal',false]);assert.equal(nodes['#modal'].open,true);
  console.log('Large card detail and modal reset checks passed.');
 }
+
+(async()=>{
+ const nodes={},calls=[],plan={fingerprint:'reviewed',early:true,basic_count:20,rows:[{name:'Swamp',current:2,suggested:14,delta:12,protected:0,colored_pips:20,fixed_sources:2}],blocking:[],warnings:[],unknown_costs:[],unknown_lands:[],method:'Balance estimate',changed:true,can_apply:true};let content='',closed=false;
+ const ctx={state:{active:'land-deck'},$:s=>nodes[s]??=( {} ),run:fn=>fn(),esc:s=>String(s),api:async(path,payload)=>{calls.push([path,payload]);return plan},mutate:async(path,payload)=>calls.push([path,payload]),modal:(title,html)=>{content=html},closeModal:()=>closed=true,toast:()=>{}};
+ vm.createContext(ctx);vm.runInContext(app.slice(app.indexOf('async function basicLandDialog('),app.indexOf('async function sample(')),ctx);
+ await nodes['#basic-land-optimizer'].onclick();assert.equal(calls[0][1].action,'preview');assert.match(content,/Apply basic land mix/);assert.match(content,/14/);assert.equal(calls.length,1);
+ await nodes['#land-apply'].onclick();assert.equal(calls[1][1].fingerprint,'reviewed');assert.equal(calls[1][1].action,'apply');assert.equal(closed,true);
+ console.log('Basic-land optimizer review and explicit apply checks passed.');
+})().catch(error=>{console.error(error);process.exitCode=1});
+
+{
+ const nodes={},prefs={},Cards=require('../static/card-view.js');
+ const ctx={ForageCards:Cards,deck:()=>({cards:[{name:'Demand',qty:1,zone:'main',mana_cost:'{W}{W}{B}',mv:3,type_line:'Creature'},{name:'Forest',qty:5,zone:'main',land:true},{name:'Rock',qty:1,zone:'main',mana_cost:'{2}',mv:2,type_line:'Artifact',oracle_text:'{T}: Add {C}{C}.'}]}),$:s=>nodes[s]??=( {} ),$$:()=>[],uiRead:(key,fallback)=>prefs[key]||fallback,uiSave:(key,value)=>prefs[key]=value,esc:s=>String(s)};
+ vm.createContext(ctx);vm.runInContext(app.slice(app.indexOf('function renderManaStats('),app.indexOf('function filterStatus(')),ctx);ctx.renderManaStats();
+ assert.match(nodes['#mana-stats'].innerHTML,/Cost · colored/);assert.match(nodes['#mana-stats'].innerHTML,/66.7%/);assert.match(nodes['#mana-stats'].innerHTML,/Average nonland mana value: 2.50/);
+ nodes['#mana-nonland'].onchange({target:{checked:false}});assert.equal(prefs.manaProductionNonlands,'no');assert.equal(nodes['#mana-nonland'].checked,false);assert.match(nodes['#mana-stats'].innerHTML,/G 100.0%/);
+ console.log('Mana cost/production rendering and production-toggle checks passed.');
+}

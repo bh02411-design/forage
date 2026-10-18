@@ -164,3 +164,13 @@ dialog.card-modal{width:min(1180px,96vw);max-width:96vw;max-height:94vh}
 .swap-origin{display:block;font-size:9px;color:var(--muted);padding:5px 2px 4px}
 .swap-categories.mode-stacks .swap-card-entry:not(:last-child) .card-visual{height:34px;border-radius:8px 8px 0 0;border-bottom:0}
 .swap-card-entry{margin-bottom:6px}
+
+.deck-footer{flex-wrap:wrap}
+
+.mana-stats-panel{margin-bottom:18px}.mana-stat-controls{display:flex;align-items:center;flex-wrap:wrap;gap:12px}.mana-stat-controls label{font-size:11px;color:var(--muted)}
+#mana-stats{padding:0 18px 18px}.mana-comparison-label{font-size:11px;color:var(--muted);margin:12px 0 6px}.mana-comparison{display:flex;min-height:30px;overflow:hidden;border-radius:5px;background:#243024}
+.mana-segment{flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;white-space:nowrap;overflow:hidden;min-height:30px;border-right:2px solid #111713}
+.mana-W{background:#f4efce;color:#2a281c}.mana-U{background:#7cbed8;color:#0c2835}.mana-B{background:#aaa3a0;color:#211d1d}.mana-R{background:#d68e72;color:#351b13}.mana-G{background:#86a67a;color:#172b13}.mana-C{background:#9ca6ad;color:#1c252c}
+.mana-color-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin-top:20px}.mana-color-card{border:1px solid var(--line);border-radius:6px;padding:12px;min-width:0}.mana-color-label{display:flex;align-items:center;gap:8px;margin-bottom:18px;font-size:12px}.mana-symbol{width:32px;height:32px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:600;flex-shrink:0}
+.mana-mini-track{height:10px;background:#29332a;border-radius:3px;overflow:hidden;margin:6px 0}.mana-mini-track>span{display:block;height:100%}.mana-color-card p{font-size:10px;color:var(--muted);margin:0 0 14px}.mana-color-card p:last-child{margin-bottom:0}
+@media(max-width:1100px){.mana-color-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:520px){.mana-color-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.mana-stats-panel .panel-head{height:auto;min-height:56px;flex-wrap:wrap;padding:12px}.mana-segment{font-size:9px}}

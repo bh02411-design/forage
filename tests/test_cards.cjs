@@ -68,3 +68,28 @@ assert.equal(pendingDecisions({...pendingDeck,chat:[...pendingDeck.chat,{id:'pas
 assert.equal(pendingDecisions({...pendingDeck,chat:[]}).proposals.length,1); // Legacy swaps remain reachable.
 assert.deepEqual(pendingDecisions({}),{recommendations:[],proposals:[],plans:[]});
 console.log('10 pending-decision checks passed.');
+
+{
+ const {manaStats}=require('../static/card-view.js');
+ const fixture=[
+  {name:'Forest',qty:4,zone:'main',land:true},
+  {name:'Typed Dual',qty:1,zone:'main',land:true,type_line:'Land — Plains Swamp'},
+  {name:'Two Mana Rock',qty:1,zone:'main',type_line:'Artifact',mana_cost:'{2}',mv:2,oracle_text:'{T}: Add {C}{C}.'},
+  {name:'Green Dork',qty:2,zone:'main',type_line:'Creature',mana_cost:'{G}',mv:1,oracle_text:'{T}: Add {G}.'},
+  {name:'Hybrid',qty:1,zone:'main',type_line:'Creature',mana_cost:'{B/G}{B/G}',mv:2},
+  {name:'Counter Color',qty:1,zone:'main',type_line:'Artifact',mana_cost:'{1}{C}',mv:2},
+  {name:'Commander',qty:1,zone:'commander',type_line:'Creature',mana_cost:'{B}{G}',mv:2,color_identity:['B','G']},
+  {name:'Considering Source',qty:30,zone:'maybe',land:true,oracle_text:'{T}: Add {U}.'},
+  {name:'Conditional',qty:1,zone:'main',land:true,type_line:'Land',oracle_text:'{T}: Add one mana of any color a land an opponent controls could produce.'},
+  {name:'Treasure Maker',qty:1,zone:'main',type_line:'Creature',mana_cost:'{3}',mv:3,oracle_text:'Create a Treasure token. (It is an artifact with “{T}, Sacrifice this artifact: Add one mana of any color.”)'},
+  {name:'Ritual',qty:1,zone:'main',type_line:'Instant',mana_cost:'{B}',mv:1,oracle_text:'Add {B}{B}{B}.'}
+ ];
+ const before=JSON.stringify(fixture),stats=manaStats(fixture),by=Object.fromEntries(stats.rows.map(r=>[r.color,r]));
+ assert.equal(by.G.cost,4);assert.equal(by.B.cost,3);assert.equal(by.C.cost,1);assert.equal(by.G.production,6);assert.equal(by.C.production,2);assert.equal(by.C.production_cards,1);assert.equal(by.W.production,1);assert.equal(by.B.production,1);assert.equal(by.U.production,0);
+ assert.ok(stats.conditionalSources.includes('Conditional'));assert.equal(JSON.stringify(fixture),before);
+ assert.equal(manaStats(fixture,false).rows.find(r=>r.color==='G').production,4);
+ const flexible=manaStats([{name:'Commander',zone:'commander',qty:1,color_identity:['B','G'],mana_cost:'{B}{G}',mv:2},{name:'Flexible',zone:'main',qty:1,land:true,type_line:'Land',oracle_text:'{T}: Add one mana of any color in your commander’s color identity.'}]);
+ assert.equal(flexible.productionTotal,2);assert.equal(flexible.rows.find(r=>r.color==='W').production,0);
+ assert.equal(manaStats([]).rows.every(r=>r.cost_percent===0&&r.production_percent===0),true);
+ console.log('Mana demand/production, hybrid, flexible and conditional source checks passed.');
+}

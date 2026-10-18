@@ -74,6 +74,14 @@ History uses published releases from your configured GitHub repository. Cached h
 
 ### Changelog
 
+**0.2.23**
+
+- Add mana cost versus potential production statistics, W/U/B/R/G/C breakdowns, and a mana-permanents toggle. Counts use Mainboard + commander and explicitly separate potential color coverage from simultaneous production.
+
+- Add Optimize basics to the Mana cost vs production panel header. Preview changes to ordinary basics using colored casting-cost demand, optional early weighting and fixed direct land sources.
+- Keep total basics and deck size constant. Preserve nonbasics, snow basics, Wastes, protected copies and Considering. Collection-only mode requires confirmed copies for increases.
+- Apply a reviewed suggestion in one undoable edit; reject stale previews and missing required metadata. See the modal’s methodology for heuristic limits.
+
 **0.2.22**
 
 - Show the same pinned Swap In and Swap Out cards on Mainboard and Considering, with source-board labels.

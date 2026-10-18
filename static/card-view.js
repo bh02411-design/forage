@@ -31,6 +31,53 @@ function boardGroups(cards,by='category',sort='name',deck={}){
  const swaps=names.map(name=>[name,cards.filter(c=>c.zone!=='commander'&&c.group===name).sort((a,b)=>sort==='mana'?((a.mv??1000)-(b.mv??1000)||a.name.localeCompare(b.name)):a.name.localeCompare(b.name))]);
  return {main:groups(ordinary,by,sort),swaps};
 }
+function manaStats(cards,includeNonlands=true){
+ const colors=['W','U','B','R','G','C'],basic={plains:'W',island:'U',swamp:'B',mountain:'R',forest:'G',wastes:'C'};
+ const active=cards.filter(c=>['main','commander'].includes(c.zone)),commanders=active.filter(c=>c.zone==='commander');
+ const identityKnown=commanders.length>0&&commanders.every(c=>Array.isArray(c.color_identity)),identity=identityKnown?[...new Set(commanders.flatMap(c=>c.color_identity))]:colors.slice(0,5);
+ const rows=colors.map(color=>({color,cost:0,cost_cards:0,production:0,production_cards:0})),by=Object.fromEntries(rows.map(r=>[r.color,r]));
+ const missingCosts=[],unknownSources=[],conditionalSources=[],optionalMdfcs=[];
+ for(const c of active){
+  const qty=Number(c.qty)||1,typ=c.type_line||'',land=c.land||(/\bLand\b/.test(typ)&&!c.mdfc),touched=new Set();
+  if(!land){
+   if(c.mana_cost==null||c.mana_cost===''&&c.mv!==0)missingCosts.push(c.name);
+   for(const match of String(c.mana_cost||'').matchAll(/\{([^}]+)\}/g)){
+    const choices=match[1].split('/').filter(x=>colors.includes(x));
+    for(const color of choices){by[color].cost+=qty/choices.length;touched.add(color)}
+   }
+   for(const color of touched)by[color].cost_cards+=qty;
+  }
+  if(c.mdfc&&!c.land){optionalMdfcs.push(c.name);continue}
+  if(!land&&(!includeNonlands||!/(?:Creature|Artifact|Enchantment|Planeswalker|Battle)/.test(typ)))continue;
+  const units=Object.fromEntries(colors.map(color=>[color,0])),name=norm(c.name.replace(/^Snow-Covered /i,''));
+  if(basic[name])units[basic[name]]=1;
+  if(land)for(const [name,color] of Object.entries(basic))if(name!=='wastes'&&new RegExp('\\b'+name+'\\b','i').test(typ))units[color]=Math.max(units[color],1);
+  const text=(c.oracle_text||'').replace(/\([^)]*\)/g,'');let uncertain=false,found=false;
+  for(const line of text.split('\n')){
+   const colon=line.indexOf(':');if(colon<0)continue;const output=line.slice(colon+1);
+   if(!/\badd\b/i.test(output))continue;found=true;
+   if(/could produce|opponent|spend this mana only|activate only|for each|an amount|search your library|equal to/i.test(line)){uncertain=true;continue}
+   const counts=Object.fromEntries(colors.map(color=>[color,0]));
+   for(const match of output.matchAll(/\{([WUBRGC])\}/g))counts[match[1]]++;
+   if(/any colou?r/i.test(output)){
+    if(/commander/i.test(output)&&!identityKnown){uncertain=true;continue}
+    const amount=output.match(/add\s+(one|two|three|four|five|[1-9][0-9]?)\s+mana/i),numbers={one:1,two:2,three:3,four:4,five:5};
+    const n=amount?(numbers[amount[1].toLowerCase()]||Number(amount[1])):1;
+    for(const color of identity)counts[color]=Math.max(counts[color],n);
+   }
+   for(const color of colors)units[color]=Math.max(units[color],counts[color]);
+  }
+  if(uncertain)conditionalSources.push(c.name);
+  if(land&&!Object.values(units).some(Boolean)&&!c.oracle_text)unknownSources.push(c.name);
+  if(!land&&/\badd\b/i.test(text)&&!found)conditionalSources.push(c.name);
+  for(const color of colors)if(units[color]){by[color].production+=units[color]*qty;by[color].production_cards+=qty}
+ }
+ const costTotal=rows.reduce((n,r)=>n+r.cost,0),productionTotal=rows.reduce((n,r)=>n+r.production,0);
+ for(const row of rows){row.cost_percent=costTotal?row.cost/costTotal*100:0;row.production_percent=productionTotal?row.production/productionTotal*100:0}
+ const spells=active.filter(c=>!c.land&&!(/\bLand\b/.test(c.type_line||'')&&!c.mdfc)),known=spells.filter(c=>typeof c.mv==='number'&&Number.isFinite(c.mv));
+ const totalMV=known.reduce((n,c)=>n+c.mv*(Number(c.qty)||1),0),spellCount=known.reduce((n,c)=>n+(Number(c.qty)||1),0);
+ return {rows,costTotal,productionTotal,totalMV,averageMV:spellCount?totalMV/spellCount:null,unknownMV:spells.length-known.length,missingCosts,unknownSources,conditionalSources:[...new Set(conditionalSources)],optionalMdfcs};
+}
 function tile(card,collection=[],source='deck',availability=null){
  const image=art(card,collection);const qty=card.qty??1;
  return `<button class="card-visual ${image?'has-art':'no-art'}" draggable="true" data-visual-card="${escape(card.id)}" data-card-source="${source}" aria-label="${escape(card.name)}${card.protected?', protected':''}" title="${escape(card.name)}"><span class="art-frame">${image?`<img src="${escape(image)}" loading="lazy" decoding="async" alt="${escape(card.name)}">`:`<span class="art-placeholder"><span class="placeholder-symbol">✳</span><strong>${escape(card.name)}</strong><small>Resolve card data for artwork</small></span>`}<span class="tile-badges"><span class="tile-quantity">${qty}×</span>${card.protected?'<span class="tile-protected" title="Protected">◆</span>':''}</span></span><span class="tile-caption"><strong>${escape(card.name)}</strong><small>${availability?`${availability.owned} owned · ${availability.free} unassigned`:card.land?'Land':'MV '+(card.mv??'?')}</small></span></button>`;
@@ -142,5 +189,5 @@ function sortCollection(cards,by='name',direction='asc',counts=new Map()){
   return result*sign||collator.compare(a.card.name,b.card.name);
  }).map(row=>row.card);
 }
-const api={groups,onBoard,boardCards,boardGroups,swapCategoryNames,art,tile,groupName,recommendation,pendingDecisions,search,compileSearch,inventory,sortCollection};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.ForageCards=api;
+const api={manaStats,groups,onBoard,boardCards,boardGroups,swapCategoryNames,art,tile,groupName,recommendation,pendingDecisions,search,compileSearch,inventory,sortCollection};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.ForageCards=api;
 })(typeof window!=='undefined'?window:globalThis);

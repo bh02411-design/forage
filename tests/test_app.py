@@ -201,6 +201,23 @@ class HttpTests(unittest.TestCase):
             with self.assertRaises(urllib.error.HTTPError):self.request('/api/category',{'deck':d['id'],'changes':[change]})
             self.assertEqual(server.read_state(),state)
         self.assertIn('Swap In',core.category_names(d));self.assertIn('Swap Out',core.category_names(d))
+    def test_basic_land_optimizer_preview_apply_undo(self):
+        from test_basic_lands import BasicLandTests
+        fixture,d=BasicLandTests().fixture();state=server.read_state();state['decks']=[d];state['active']=d['id'];state['collection']=fixture['collection'];server.write_state(state)
+        before=copy.deepcopy(d['cards']);collection=copy.deepcopy(state['collection']);history=copy.deepcopy(d['history'])
+        with self.request('/api/optimize-basics',{'deck':d['id']}) as response:plan=json.load(response)
+        self.assertTrue(plan['can_apply']);self.assertEqual(server.read_state()['decks'][0]['history'],history)
+        with self.request('/api/optimize-basics',{'deck':d['id'],'action':'apply','fingerprint':plan['fingerprint']}) as response:json.load(response)
+        after=server.read_state();self.assertNotEqual(after['decks'][0]['cards'],before);self.assertEqual(after['collection'],collection);self.assertEqual(len(after['decks'][0]['history']),1)
+        with self.request('/api/undo',{'deck':d['id']}) as response:json.load(response)
+        self.assertEqual(server.read_state()['decks'][0]['cards'],before)
+    def test_basic_land_optimizer_rejects_unreviewed_options(self):
+        from test_basic_lands import BasicLandTests
+        fixture,d=BasicLandTests().fixture();state=server.read_state();state['decks']=[d];state['active']=d['id'];state['collection']=fixture['collection'];server.write_state(state)
+        with self.request('/api/optimize-basics',{'deck':d['id'],'early':True}) as response:plan=json.load(response)
+        before=server.read_state()
+        with self.assertRaises(urllib.error.HTTPError):self.request('/api/optimize-basics',{'deck':d['id'],'action':'apply','early':False,'fingerprint':plan['fingerprint']})
+        self.assertEqual(server.read_state(),before)
     def test_bulk_remove_validation_is_atomic(self):
         state=server.read_state();d=state['decks'][0]
         a=core.make_entry('Safe selection',1);a['group']='Selection'
