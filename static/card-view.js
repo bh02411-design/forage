@@ -25,6 +25,17 @@ function countedBoardCards(deck,zone){
  const shared=Object.values(swapCategoryNames(deck));
  return (deck.cards||[]).filter(c=>onBoard(c,zone)&&(c.zone==='commander'||!shared.includes(c.group)));
 }
+function archidektExport(deck){
+ const cards=countedBoardCards(deck,'main');
+ const lines=cards.map(c=>{
+  const category=c.zone==='commander'?'Commander':String(c.group||'Uncategorized');
+  if(/[\[\]{},\r\n]/.test(category))throw Error('Rename category "'+category+'" before exporting: Archidekt category syntax reserves commas, brackets, braces and line breaks.');
+  if(/[\r\n]/.test(c.name))throw Error('Card names must not contain line breaks.');
+  return `${c.qty} ${c.name} [${category}${c.zone==='commander'?'{top}':''}]`;
+ });
+ const pins=Object.values(swapCategoryNames(deck));
+ return {text:lines.join('\n'),total:cards.reduce((n,c)=>n+c.qty,0),considering:(deck.cards||[]).filter(c=>c.zone==='maybe'&&!pins.includes(c.group)).reduce((n,c)=>n+c.qty,0),staging:(deck.cards||[]).filter(c=>['main','maybe'].includes(c.zone)&&pins.includes(c.group)).reduce((n,c)=>n+c.qty,0)};
+}
 function boardCards(deck,zone){
  const shared=Object.values(swapCategoryNames(deck));
  return (deck.cards||[]).filter(c=>onBoard(c,zone)||(['main','maybe'].includes(c.zone)&&shared.includes(c.group)));
@@ -193,5 +204,5 @@ function sortCollection(cards,by='name',direction='asc',counts=new Map()){
   return result*sign||collator.compare(a.card.name,b.card.name);
  }).map(row=>row.card);
 }
-const api={manaStats,groups,onBoard,countedBoardCards,boardCards,boardGroups,swapCategoryNames,art,tile,groupName,recommendation,pendingDecisions,search,compileSearch,inventory,sortCollection};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.ForageCards=api;
+const api={manaStats,groups,onBoard,countedBoardCards,archidektExport,boardCards,boardGroups,swapCategoryNames,art,tile,groupName,recommendation,pendingDecisions,search,compileSearch,inventory,sortCollection};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.ForageCards=api;
 })(typeof window!=='undefined'?window:globalThis);

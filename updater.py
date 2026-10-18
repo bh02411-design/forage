@@ -11,6 +11,7 @@ MAX_PACKAGE=20*1024*1024
 
 # Release notes stay in an existing updater file so older installers accept the package.
 CHANGELOG={
+ '0.2.33':['Fix deck export including Considering and swap staging cards that are outside board totals.','Preserve custom Archidekt categories and commander designation instead of replacing them with Mainboard.','Preview the exported list and included/excluded counts before downloading.'],
  '0.2.32':['Show total cards to sleeve, counting quantities, and marked entries in the physical deck checklist.','Refresh checklist totals after marking cards sleeved.'],
  '0.2.31':['Mark individual deck entries as Needs sleeving in card details; show markers in graphical and list views.','Filter the board to marked cards or open a physical-deck checklist and mark cards done after sleeving.','Keep markers saved per deck without changing roles, categories or board totals.'],
  '0.2.30':['Add an explicit Hide chat control in the conversation header and Show chat on the visual board.','Reuse the saved per-deck expanded view so collapsing chat gives the board full width and restores the latest conversation when reopened.'],

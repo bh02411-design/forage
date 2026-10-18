@@ -74,6 +74,12 @@ History uses published releases from your configured GitHub repository. Cached h
 
 ### Changelog
 
+**0.2.33**
+
+- Fix Archidekt export to include only the counted mainboard and commanders, excluding Considering and both swap staging categories (including renamed pins).
+- Preserve custom category names and commander designation. Preview the text, included count and excluded counts before download; flag non-100-card lists.
+- Import into an empty Archidekt deck to avoid adding duplicate copies to an existing list. Category names containing reserved syntax must be renamed before export.
+
 **0.2.32**
 
 - Show total copies to sleeve and the number of marked entries at the top of the physical deck checklist. Totals update as entries are marked done.

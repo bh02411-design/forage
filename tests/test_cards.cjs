@@ -93,3 +93,23 @@ console.log('10 pending-decision checks passed.');
  assert.equal(manaStats([]).rows.every(r=>r.cost_percent===0&&r.production_percent===0),true);
  console.log('Mana demand/production, hybrid, flexible and conditional source checks passed.');
 }
+
+{
+ const Cards=require('../static/card-view.js');
+ const deck={swap_categories:{in:'Incoming picks',out:'Cuts'},cards:[
+  {name:'Commander fixture',zone:'commander',qty:1,group:'Cuts'},
+  {name:'Main fixture',zone:'main',qty:62,group:'Sacrifice & Draw'},
+  {name:'Forest',zone:'main',qty:37,group:'Untapped Lands'},
+  {name:'Waiting fixture',zone:'maybe',qty:15,group:'Draw'},
+  {name:'Staged main fixture',zone:'main',qty:12,group:'Cuts'},
+  {name:'Staged maybe fixture',zone:'maybe',qty:8,group:'Incoming picks'}
+ ]};
+ const before=JSON.stringify(deck),out=Cards.archidektExport(deck);
+ assert.equal(out.total,100);assert.equal(out.staging,20);assert.equal(out.considering,15);
+ assert.equal(out.text,'1 Commander fixture [Commander{top}]\n62 Main fixture [Sacrifice & Draw]\n37 Forest [Untapped Lands]');
+ assert.equal(JSON.stringify(deck),before);
+ assert.doesNotMatch(out.text,/Waiting fixture|Staged/);
+ assert.equal(Cards.archidektExport({cards:[]}).total,0);
+ assert.throws(()=>Cards.archidektExport({cards:[{name:'Fixture',zone:'main',qty:1,group:'Draw,Ramp'}]}),/Rename category/);
+ console.log('Archidekt export preserves categories and quantities, excludes both boards’ staging, handles renamed pins and matches 100-card mainboard totals.');
+}

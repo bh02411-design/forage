@@ -282,7 +282,12 @@ $('#import-open').onclick=()=>importDialog(view==='collection'?'collection':'dec
 $('#add-memory').onclick=()=>memoryDialog();$('#enrich').onclick=()=>run(enrichDeck);
 for(const id of ['undo','history-undo'])$('#'+id).onclick=()=>run(async()=>{await mutate('undo',{});toast('Last deck change undone.');});
 $('#backup').onclick=()=>download('forage-backup-'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify(state,null,2),'application/json');
-$('#export').onclick=()=>download('forage-deck.txt',deck().cards.map(c=>`${c.qty} ${c.name} [${c.zone==='commander'?'Commander':c.zone==='maybe'?'Maybeboard':c.group==='Land'?'Land':'Mainboard'}]`).join('\n'));
+function exportDeckDialog(){
+ const exported=ForageCards.archidektExport(deck());
+ modal('Export to Archidekt',`<p><strong>${exported.total} cards · Mainboard + commander</strong></p><p class="modal-note">Custom categories and commander designation are included. Excluded: ${exported.considering} Considering cards and ${exported.staging} cards in Swap In / Swap Out.</p><label class="field">Archidekt text import<textarea id="export-deck-text" rows="12" readonly>${esc(exported.text)}</textarea></label>${exported.total!==100?'<p class="notice">This export contains '+exported.total+' cards. Commander decks normally contain 100 including commanders.</p>':''}<div class="modal-actions"><button id="export-deck-download" class="button primary">Download deck</button></div><p class="modal-note">In Archidekt, import this list into a new empty deck to avoid adding copies to an existing list. Use its custom category grouping to display your categories.</p>`);
+ $('#export-deck-download').onclick=()=>download('forage-deck.txt',exported.text);
+}
+$('#export').onclick=()=>run(exportDeckDialog);
 $('#chat-form').onsubmit=sendChat;$('#message').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat()}};
 $$('[data-prompt]').forEach(b=>b.onclick=()=>{$('#message').value=b.dataset.prompt;$('#message').focus()});$('#sample').onclick=()=>run(sample);
 bindDrop($('#deck-drop'));bindDrop($('#chat-form'));
