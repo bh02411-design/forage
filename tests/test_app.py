@@ -181,6 +181,18 @@ class HttpTests(unittest.TestCase):
         after=server.read_state()['decks'][0]['cards']
         self.assertEqual(next(c for c in after if c['id']==a['id'])['group'],'Selection')
         self.assertEqual(next(c for c in after if c['id']==b['id'])['group'],'Destination')
+    def test_needs_sleeving_marker_persists_clears_and_undoes(self):
+        state=server.read_state();deck=state['decks'][0];card=deck['cards'][0]
+        before=core.analysis(deck)
+        with self.request('/api/card',{'deck':deck['id'],'id':card['id'],'action':'edit','needs_sleeving':True}) as response:json.load(response)
+        after=server.read_state()['decks'][0]
+        self.assertTrue(after['cards'][0]['needs_sleeving']);self.assertEqual(core.analysis(after),before)
+        with self.request('/api/card',{'deck':deck['id'],'id':card['id'],'action':'edit','needs_sleeving':False}) as response:json.load(response)
+        self.assertFalse(server.read_state()['decks'][0]['cards'][0]['needs_sleeving'])
+        with self.request('/api/undo',{'deck':deck['id']}) as response:json.load(response)
+        self.assertTrue(server.read_state()['decks'][0]['cards'][0]['needs_sleeving'])
+        with self.assertRaises(urllib.error.HTTPError):self.request('/api/card',{'deck':deck['id'],'id':card['id'],'action':'edit','needs_sleeving':'yes'})
+        self.assertTrue(server.read_state()['decks'][0]['cards'][0]['needs_sleeving'])
     def test_swap_categories_move_rename_remove_and_undo(self):
         state=server.read_state();d=state['decks'][0];card=core.make_entry('Swap category fixture',2);d['cards'].append(card);server.write_state(state)
         count=core.analysis(d)['total'];collection=copy.deepcopy(state['collection'])

@@ -194,3 +194,6 @@ dialog.card-modal{width:min(1180px,96vw);max-width:96vw;max-height:94vh}
 
 .chat-header-actions{flex-wrap:wrap;justify-content:flex-end}
 .conversation>.panel-head{height:auto;min-height:59px;padding-top:10px;padding-bottom:10px;flex-wrap:wrap}
+
+.card-visual{position:relative}.tile-sleeving{position:absolute;top:5px;left:42px;height:19px;padding:3px 5px;border-radius:4px;background:#dfb978;color:#182315;font-size:9px;font-weight:700;pointer-events:none}.sleeving-label{font-size:10px;color:var(--amber)}
+.sleeving-checklist-row{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--line)}.sleeving-checklist-row small{display:block;margin-top:4px}

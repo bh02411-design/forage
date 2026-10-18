@@ -792,7 +792,8 @@ class Handler(BaseHTTPRequestHandler):
                         if c.get('protected'):raise ValueError('Unprotect this card before removing it.')
                         deck['cards'].remove(c)
                     elif action=='edit':
-                        for k in ['group','roles','protected','zone','mv','land','mdfc','qty']:
+                        if 'needs_sleeving' in payload and not isinstance(payload['needs_sleeving'],bool):raise ValueError('Needs sleeving must be true or false.')
+                        for k in ['group','roles','protected','zone','mv','land','mdfc','qty','needs_sleeving']:
                             if k in payload:c[k]=payload[k]
                         if c['zone'] not in ['main','maybe','commander'] or not isinstance(c['qty'],int) or not 1<=c['qty']<=100000:raise ValueError('Invalid card quantity or board.')
                         if 'group' in payload:c['category_manual']=True

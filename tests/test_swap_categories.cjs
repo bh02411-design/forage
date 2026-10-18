@@ -47,3 +47,14 @@ assert.equal(Cards.countedBoardCards(renamed,'main')[0].qty,2);
 renamed.cards[0].group='Incoming picks';
 assert.deepEqual(Cards.countedBoardCards(renamed,'main'),[]);
 console.log('Staging totals exclude both pins, support renamed categories and update on moves.');
+
+cards[1].needs_sleeving=true;
+el('#needs-sleeving-only').checked=true;
+context.zone='main';context.renderDeck();
+assert.match(el('#deck-list').innerHTML,/Normal/);assert.doesNotMatch(el('#deck-list').innerHTML,/Leader/);
+assert.equal(el('#card-count').textContent,'1 cards');
+assert.match(Cards.tile(cards[1]),/tile-sleeving/);
+assert.match(Cards.tile(cards[1]),/needs sleeving/);
+assert.doesNotMatch(Cards.tile({...cards[1],needs_sleeving:false}),/tile-sleeving/);
+el('#needs-sleeving-only').checked=false;
+console.log('Physical-deck markers render and the checklist filter selects only marked entries.');

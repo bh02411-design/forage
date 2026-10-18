@@ -74,6 +74,11 @@ History uses published releases from your configured GitHub repository. Cached h
 
 ### Changelog
 
+**0.2.31**
+
+- Mark Needs sleeving in card details and save to track physical deck additions. Badges appear on marked cards; use Needs sleeving only or Physical deck checklist to find them.
+- Mark cards Done in the checklist after updating your physical deck. Markers apply to all copies in that entry, remain saved per deck, and do not affect card totals or categories. Existing cards are unmarked by default; marking is manual.
+
 **0.2.30**
 
 - Hide chat from its header or the board toolbar to give the board full width. Reopen with Show chat. Uses the saved per-deck view preference and restores the latest conversation when reopened.
