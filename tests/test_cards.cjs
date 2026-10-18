@@ -113,3 +113,18 @@ console.log('10 pending-decision checks passed.');
  assert.throws(()=>Cards.archidektExport({cards:[{name:'Fixture',zone:'main',qty:1,group:'Draw,Ramp'}]}),/Rename category/);
  console.log('Archidekt export preserves categories and quantities, excludes both boards’ staging, handles renamed pins and matches 100-card mainboard totals.');
 }
+
+{
+ const {manaCostMarkup}=require('../static/card-view.js');
+ const ordinary=manaCostMarkup({mana_cost:'{2}{B}{B}'});
+ assert.equal((ordinary.match(/class="checklist-pip/g)||[]).length,3);
+ assert.equal((ordinary.match(/mana-B/g)||[]).length,2);assert.match(ordinary,/2, black, black/);
+ const special=manaCostMarkup({mana_cost:'{X}{W/U}{B/P}{C}{S}{0}'});
+ for(const symbol of ['X','W/U','B/P','C','S','0'])assert.ok(special.includes('>'+symbol+'</span>'));
+ assert.match(special,/white or blue/);assert.match(special,/black or Phyrexian/);
+ assert.match(manaCostMarkup({land:true}),/Land · no mana cost/);
+ assert.match(manaCostMarkup({}),/Mana cost unknown/);
+ assert.match(manaCostMarkup({mana_cost:''}),/No mana cost/);
+ assert.ok(!manaCostMarkup({mana_cost:'<img src=x>'}).includes('<img'));
+ console.log('Checklist mana pips retain repeated, generic, hybrid, Phyrexian, variable and missing-cost distinctions.');
+}

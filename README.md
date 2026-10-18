@@ -74,6 +74,11 @@ History uses published releases from your configured GitHub repository. Cached h
 
 ### Changelog
 
+**0.2.34**
+
+- Show full mana costs under card names in the physical deck checklist, using colored pips and accessible labels. Include generic, repeated colored, hybrid, Phyrexian, snow, colorless and variable symbols as stored.
+- Identify lands and unknown costs without guessing. Hover the symbols for the original brace notation.
+
 **0.2.33**
 
 - Fix Archidekt export to include only the counted mainboard and commanders, excluding Considering and both swap staging categories (including renamed pins).

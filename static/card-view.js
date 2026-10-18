@@ -25,6 +25,18 @@ function countedBoardCards(deck,zone){
  const shared=Object.values(swapCategoryNames(deck));
  return (deck.cards||[]).filter(c=>onBoard(c,zone)&&(c.zone==='commander'||!shared.includes(c.group)));
 }
+function manaCostMarkup(card){
+ const cost=card.mana_cost;
+ if(cost==null)return `<span class="checklist-cost muted">${card.land?'Land · no mana cost':'Mana cost unknown'}</span>`;
+ if(!String(cost).trim())return `<span class="checklist-cost muted">${card.land?'Land · no mana cost':'No mana cost'}</span>`;
+ const tokens=[...String(cost).matchAll(/\{([^{}]+)\}/g)].map(m=>m[1]);
+ if(!tokens.length||String(cost).replace(/\{[^{}]+\}/g,'').trim())return `<span class="checklist-cost">${escape(cost)}</span>`;
+ const names={W:'white',U:'blue',B:'black',R:'red',G:'green',C:'colorless',S:'snow',P:'Phyrexian',X:'X',Y:'Y',Z:'Z'};
+ return `<span class="checklist-cost" role="img" aria-label="${escape('Mana cost '+tokens.map(t=>t.split('/').map(p=>names[p]||p).join(' or ')).join(', '))}" title="${escape(cost)}">${tokens.map(t=>{
+  const colors=t.split('/').filter(p=>['W','U','B','R','G','C'].includes(p));
+  return `<span class="checklist-pip${colors.length===1?' mana-'+colors[0]:''}" aria-hidden="true">${escape(t)}</span>`;
+ }).join('')}</span>`;
+}
 function archidektExport(deck){
  const cards=countedBoardCards(deck,'main');
  const lines=cards.map(c=>{
@@ -204,5 +216,5 @@ function sortCollection(cards,by='name',direction='asc',counts=new Map()){
   return result*sign||collator.compare(a.card.name,b.card.name);
  }).map(row=>row.card);
 }
-const api={manaStats,groups,onBoard,countedBoardCards,archidektExport,boardCards,boardGroups,swapCategoryNames,art,tile,groupName,recommendation,pendingDecisions,search,compileSearch,inventory,sortCollection};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.ForageCards=api;
+const api={manaStats,groups,onBoard,countedBoardCards,manaCostMarkup,archidektExport,boardCards,boardGroups,swapCategoryNames,art,tile,groupName,recommendation,pendingDecisions,search,compileSearch,inventory,sortCollection};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.ForageCards=api;
 })(typeof window!=='undefined'?window:globalThis);
