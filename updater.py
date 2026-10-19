@@ -11,6 +11,7 @@ MAX_PACKAGE=20*1024*1024
 
 # Release notes stay in an existing updater file so older installers accept the package.
 CHANGELOG={
+ '0.2.36':['Publish the standalone Windows installer after corrected installation and tray verification.','Include bundled Python, shortcuts, clean starter data and the shared GitHub update channel.'],
  '0.2.35':['Add a Windows installer with a bundled Python runtime, Forage icon, shortcuts and a short getting-started guide.','Keep fresh installations empty and store personal data separately from installed application files.','Connect new installs to the existing public GitHub update channel; AI setup remains optional.'],
  '0.2.34':['Show full stored mana costs as colored pips in the physical deck checklist, including generic and repeated colored requirements.','Preserve hybrid, Phyrexian and variable symbols; distinguish lands and missing mana data.'],
  '0.2.33':['Fix deck export including Considering and swap staging cards that are outside board totals.','Preserve custom Archidekt categories and commander designation instead of replacing them with Mainboard.','Preview the exported list and included/excluded counts before downloading.'],

@@ -76,6 +76,10 @@ History uses published releases from your configured GitHub repository. Cached h
 
 ### Changelog
 
+**0.2.36**
+
+- Correct the installer verification status endpoint and ensure failed-test process cleanup waits for exit. Publish the installer only after install, tray launch, reinstall and uninstall checks pass.
+
 **0.2.35**
 
 - Add a clean, per-user Windows installer with bundled Python 3.13.16, Forage icon, shortcuts and getting-started instructions. The build verifies the runtime SHA-256 and includes its license.

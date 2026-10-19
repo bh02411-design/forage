@@ -28,13 +28,15 @@ def main():
                         raise RuntimeError((data/'forage.log').read_text() if (data/'forage.log').exists() else 'Tray failed to start')
                     time.sleep(.5)
             assert not state['state']['collection'] and not state['state']['decks'][0]['cards']
-            with urllib.request.urlopen(base+'/api/desktop',timeout=3) as response:desktop=json.load(response)
+            with urllib.request.urlopen(base+'/api/desktop/status',timeout=3) as response:desktop=json.load(response)
             assert desktop['supported'] and desktop['tray_running']
             request=urllib.request.Request(base+'/api/desktop',data=b'{"action":"quit"}',headers={'Content-Type':'application/json','X-Forage-Token':state['token']})
             with urllib.request.urlopen(request,timeout=3):pass
             process.wait(timeout=20)
         finally:
-            if process.poll() is None:subprocess.run(['taskkill','/PID',str(process.pid),'/T','/F'],capture_output=True)
+            if process.poll() is None:
+                subprocess.run(['taskkill','/PID',str(process.pid),'/T','/F'],capture_output=True)
+                process.wait(timeout=10)
         subprocess.run(command,check=True,timeout=120)
         assert marker.read_text()=='Personal data must survive'
         subprocess.run([str(app/'unins000.exe'),'/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART'],check=True,timeout=60)
