@@ -4,7 +4,9 @@ A local-first Commander deck builder with collection-aware AI, editable preferen
 
 ## Install and start
 
-Extract the application into a writable folder. Install Python 3.10 or newer if needed, then run **Start-Forage.bat** on Windows. No pip dependencies are required. Keep its terminal open. On macOS/Linux run `python3 launcher.py --open`. Forage serves only on `127.0.0.1`, normally port 8765. Use `--port 8766` if needed.
+For Windows 10/11 on Intel/AMD 64-bit PCs, download **Forage-Setup.exe** from the [latest release](https://github.com/bh02411-design/forage/releases/latest), run it, and choose **Open Forage** when installation finishes. Python is bundled; no commands, administrator access or separate Python installation are needed. Start-menu and optional desktop shortcuts reopen the tray app. New installations start empty and save personal data in `%LOCALAPPDATA%\Forage\data`, separately from the installed program. Uninstall preserves this folder. AI is optional; LM Studio and its models are installed separately.
+
+For a source installation, extract the application into a writable folder, install Python 3.10 or newer, and run **Start-Forage.bat** on Windows. No pip dependencies are required. The app runs from the tray without keeping a terminal open. On macOS/Linux run `python3 launcher.py --open`. Forage serves only on `127.0.0.1`, normally port 8765. Use `--port 8766` if needed.
 
 Import a deck and collection separately. Use **Resolve card data** to retrieve Oracle text, costs, colors, power and images from Scryfall. Collection lookups run in resumable batches; unknown facts remain unknown. Import other decks to account for assigned physical copies. Membership in a deck is not proof of ownership.
 
@@ -73,6 +75,12 @@ Selecting a version opens a review screen. Switching verifies the release hashes
 History uses published releases from your configured GitHub repository. Cached history and bundled notes remain readable when GitHub is unavailable; downloading another release still requires connectivity. Keep using a repository you trust.
 
 ### Changelog
+
+**0.2.35**
+
+- Add a clean, per-user Windows installer with bundled Python 3.13.16, Forage icon, shortcuts and getting-started instructions. The build verifies the runtime SHA-256 and includes its license.
+- Preserve data outside the install folder and use the same GitHub application updater. Windows CI checks installation, bundled-runtime imports, tray/server startup, clean workspace, reinstall and uninstall.
+- The unsigned installer may display Windows publisher/reputation prompts. Verify it came from this repository. Quit Forage before rerunning the installer; existing users can use the normal application updater.
 
 **0.2.34**
 

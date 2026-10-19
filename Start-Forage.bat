@@ -1,6 +1,10 @@
 @echo off
 setlocal
 cd /d "%~dp0"
+if exist "%~dp0runtime\pythonw.exe" (
+    start "" "%~dp0runtime\pythonw.exe" "%~dp0launcher.py" --tray --open --data-dir "%LOCALAPPDATA%\Forage\data"
+    goto end
+)
 where py >nul 2>nul
 if %errorlevel% equ 0 (
     py -3 -c "import sys; assert sys.version_info >= (3,10)" >nul 2>nul

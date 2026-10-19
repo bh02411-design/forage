@@ -52,3 +52,34 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "$RELEASE_TAG" dist/Forage-update.zip --target "$GITHUB_SHA" --notes-file dist/release-notes.md
+  windows-installer:
+    needs: release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Stage application and verified embedded Python
+        run: python build_windows.py --output dist/windows-payload
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $compiler = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (!(Test-Path $compiler)) {
+            choco install innosetup --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed' }
+          }
+          $version = (Get-Content version.json | ConvertFrom-Json).version
+          & $compiler "/DPayloadDir=$((Resolve-Path dist/windows-payload).Path)" "/DAppVersion=$version" packaging/Forage.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed' }
+      - name: Verify install and bundled tray launch
+        run: python tests/windows_installer_smoke.py dist/Forage-Setup.exe
+      - name: Publish Windows installer
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = (Get-Content version.json | ConvertFrom-Json).version
+          gh release upload "v$version" dist/Forage-Setup.exe --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Installer upload failed' }
