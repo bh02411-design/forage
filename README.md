@@ -30,6 +30,8 @@ Explicit preference statements produce a **Remember** suggestion. Save it to ret
 
 Use Backup to export the local workspace. Restore creates an additional local copy before replacing data. No live database, chat history, personal deck export or local preferences belong in this repository or a release asset.
 
+To delete a deck, open **Manage decks** in the top bar, choose **Delete…** beside its name, then confirm **Delete deck**. Its full contents move to **Deleted decks** in the same dialog. Choose **Restore** there to recover and select it, including its cards, conversation, history and view settings. Deleted decks stop reserving collection copies; restoring reinstates their assignments. Collection quantities and saved memories are unchanged. Deleting the last deck creates a fresh empty deck. Deleted decks stay local and are included in workspace backups.
+
 ## Updates
 
 The default release repository is `bh02411-design/forage`. Open **Local AI & settings → Application updates** to change the trusted public source, check now, or enable checks on launch. No GitHub credentials are stored. Only repository/version requests go to GitHub; local workspace contents are not uploaded.

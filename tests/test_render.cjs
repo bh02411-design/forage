@@ -1,4 +1,5 @@
 const assert=require('node:assert/strict');
+require('./test_deck_lifecycle.cjs');
 const {cleanReply,render}=require('../static/render.js');
 assert.equal(cleanReply('{"reply":"Hello\\n\\n**World**"}, "proposals": []'),'Hello\n\n**World**');
 assert.equal(cleanReply('{"reply":"Say \\"hello\\".","broken":['),'Say "hello".');

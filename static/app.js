@@ -271,6 +271,21 @@ $('#basic-land-optimizer').onclick=()=>run(()=>basicLandDialog());
 async function sample(){const r=await api('sample',{deck:state.active});modal('Land-drop sample',`<p class="modal-note">${esc(r.assumptions)}</p><p class="notice">${r.opening_two_to_four}% of opening hands had 2–4 potential lands.</p><table><thead><tr><th>Through turn</th><th>Hit every land drop</th></tr></thead><tbody>${Object.entries(r.land_drop).map(([t,p])=>`<tr><td>${t}</td><td>${p}%</td></tr>`).join('')}</tbody></table><p class="modal-note">${r.runs.toLocaleString()} seeded samples · seed ${r.seed}. This does not estimate whether you can cast Ygra on time: colored sources, tapped lands, ramp, and draw engines are excluded.</p>`)}
 $('#modal-close').onclick=closeModal;$('#modal').addEventListener('click',e=>{if(e.target===$('#modal')){const r=$('#modal').getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)closeModal()}});
 $$('[data-view]').forEach(b=>b.onclick=()=>changeView(b.dataset.view));
+function manageDecksDialog(){
+ const deleted=state.deleted_decks||[];
+ modal('Manage decks',`<p class="modal-note">Delete a deck from your workspace, or restore a previously deleted deck.</p><div class="deck-manager-list">${state.decks.map(d=>`<div class="deck-manager-row"><div><strong>${esc(d.name)}</strong>${d.id===state.active?'<small class="muted">Active deck</small>':''}</div><button class="button secondary" data-delete-deck="${esc(d.id)}">Delete…</button></div>`).join('')}</div><h3>Deleted decks · ${deleted.length}</h3><p class="modal-note">Cards, chat, and deck history are kept here until you restore the deck. Deleted decks do not reserve cards from your collection. Restoring one restores its card assignments.</p><div class="deck-manager-list">${deleted.map(e=>`<div class="deck-manager-row"><div><strong>${esc(e.deck.name)}</strong><small class="muted">Deleted ${esc(new Date(e.deleted_at).toLocaleDateString())}</small></div><button class="button secondary" data-restore-deck="${esc(e.deck.id)}">Restore</button></div>`).join('')||'<p class="muted">No deleted decks.</p>'}</div>`);
+ $$('[data-delete-deck]').forEach(b=>b.onclick=()=>deleteDeckDialog(b.dataset.deleteDeck));
+ $$('[data-restore-deck]').forEach(b=>b.onclick=()=>run(async()=>{b.disabled=true;try{await mutate('restore-deck',{id:b.dataset.restoreDeck});manageDecksDialog();toast('Deck restored and selected.')}finally{b.disabled=false}}));
+}
+function deleteDeckDialog(id){
+ const target=state.decks.find(d=>d.id===id);if(!target)return;
+ const name=target.name,total=target.cards.reduce((n,c)=>n+c.qty,0);
+ modal('Delete deck?',`<p>Delete <strong>${esc(name)}</strong> from your workspace?</p><p class="modal-note">${total} cards across all boards, its chat, and its deck history will move to Deleted decks. You can restore the complete deck from Manage decks. Your collection quantities and saved memories stay unchanged.</p>${state.decks.length===1?'<p class="modal-note">A fresh empty deck will open after deleting your last deck.</p>':''}<div class="modal-actions"><button id="cancel-delete-deck" class="button secondary">Cancel</button><button id="confirm-delete-deck" class="button danger">Delete deck</button></div>`);
+ $('#cancel-delete-deck').onclick=manageDecksDialog;
+ $('#confirm-delete-deck').onclick=()=>run(async()=>{const button=$('#confirm-delete-deck');button.disabled=true;try{await mutate('delete-deck',{id,confirmed_name:name});manageDecksDialog();toast('Deck deleted. Restore it from Manage decks → Deleted decks.')}finally{button.disabled=false}});
+ $('#cancel-delete-deck').focus();
+}
+$('#manage-decks').onclick=manageDecksDialog;
 $('#deck-select').onchange=e=>run(()=>mutate('active',{id:e.target.value}));
 $('#new-deck').onclick=()=>{modal('Start another deck','<label class="field">Deck name<input id="new-name" placeholder="Terra · Reanimator"></label><button id="create-deck" class="button primary">Create deck</button>');$('#create-deck').onclick=()=>run(async()=>{await mutate('new-deck',{name:$('#new-name').value});closeModal();changeView('workbench')})};
 $('#deck-syntax-key').onclick=()=>syntaxKey('deck');$('#collection-syntax-key').onclick=()=>syntaxKey('collection');
