@@ -91,6 +91,23 @@ def deck_of(state,ident):
     if not deck: raise ValueError('Deck not found.')
     return deck
 
+def delete_deck(state,ident,confirmed_name):
+    deck=deck_of(state,ident)
+    if confirmed_name!=deck['name']:raise ValueError('The deck name changed. Reopen Delete deck and confirm again.')
+    position=state['decks'].index(deck)
+    state.setdefault('deleted_decks',[]).append({'deck':deck,'position':position,'deleted_at':datetime.datetime.now(datetime.timezone.utc).isoformat()})
+    state['decks'].remove(deck)
+    if not state['decks']:state['decks'].append(initial_state()['decks'][0])
+    if state['active']==ident:state['active']=state['decks'][min(position,len(state['decks'])-1)]['id']
+
+def restore_deck(state,ident):
+    entry=next((e for e in state.get('deleted_decks',[]) if e['deck']['id']==ident),None)
+    if not entry:raise ValueError('Deleted deck not found. It may already have been restored.')
+    if any(d['id']==ident for d in state['decks']):raise ValueError('A deck with this ID already exists.')
+    state['decks'].insert(min(entry['position'],len(state['decks'])),entry['deck'])
+    state['deleted_decks'].remove(entry)
+    state['active']=ident
+
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self,*args,**kwargs): raise ValueError('Unexpected redirect blocked.')
 
@@ -735,6 +752,8 @@ class Handler(BaseHTTPRequestHandler):
                     name=str(payload.get('name','')).strip()[:120]
                     if not name: raise ValueError('Enter a deck name.')
                     d={'id':uid(),'name':name,'source':'Local deck','cards':[],'chat':[],'history':[],'proposals':[]};state['decks'].append(d);state['active']=d['id']
+                elif path=='/api/delete-deck':delete_deck(state,payload.get('id'),payload.get('confirmed_name'))
+                elif path=='/api/restore-deck':restore_deck(state,payload.get('id'))
                 elif path=='/api/import':
                     cards,warnings=parse_import(payload.get('text',''))
                     if payload.get('target')=='collection':
@@ -876,7 +895,15 @@ def validate_backup(state):
     for field in ['decks','collection','memories','rules']:
         if not isinstance(state.get(field),list):raise ValueError('Invalid backup: '+field)
     if not state['decks'] or state.get('active') not in [d.get('id') for d in state['decks']]:raise ValueError('Invalid active deck.')
-    for d in state['decks']:
+    deleted=state.get('deleted_decks',[])
+    if not isinstance(deleted,list):raise ValueError('Invalid deleted decks in backup.')
+    for entry in deleted:
+        if not isinstance(entry,dict) or not isinstance(entry.get('deck'),dict) or type(entry.get('position')) is not int or entry['position']<0 or not isinstance(entry.get('deleted_at'),str):raise ValueError('Invalid deleted deck in backup.')
+    decks=state['decks']+[entry['deck'] for entry in deleted]
+    ids=[d.get('id') for d in decks]
+    if any(not isinstance(ident,str) or not ident for ident in ids) or len(set(ids))!=len(ids):raise ValueError('Invalid or duplicate deck IDs in backup.')
+    for d in decks:
+        if not isinstance(d.get('name'),str):raise ValueError('Invalid deck name in backup.')
         for field in ['cards','chat','history','proposals']:
             if not isinstance(d.get(field),list):raise ValueError('Invalid deck data.')
         for c in d['cards']:

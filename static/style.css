@@ -178,6 +178,13 @@ dialog.card-modal{width:min(1180px,96vw);max-width:96vw;max-height:94vh}
 @media(max-width:520px){.mana-color-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 /* Desktop navigation can shrink to an icon rail without narrowing mobile navigation. */
+.deck-manager-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0;border-bottom:1px solid var(--line)}
+.deck-manager-row>div{min-width:0;overflow-wrap:anywhere}
+.deck-manager-row small{display:block;margin-top:5px}
+.deck-manager-row button{flex-shrink:0}
+.button.danger{color:#ffd0cb;background:#4c2425;border:1px solid #a75c58}
+.button.danger:hover{background:#653032}
+@media(max-width:700px){.topbar .breadcrumb{display:none}.topbar .top-actions{width:100%;justify-content:flex-end}}
 .sidebar-toggle{position:absolute;top:6px;right:8px;font-size:23px;line-height:1;min-width:32px;min-height:32px;border-radius:6px;color:var(--muted)}
 .sidebar-toggle:hover{color:var(--green);background:#1b251b}
 .sidebar-toggle:focus-visible{outline:2px solid var(--green);outline-offset:2px}
