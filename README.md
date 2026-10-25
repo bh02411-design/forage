@@ -78,6 +78,11 @@ History uses published releases from your configured GitHub repository. Cached h
 
 ### Changelog
 
+**0.2.38**
+
+- Dim collection artwork when all owned copies are assigned across decks. Cards with spare copies keep normal brightness.
+- Show All copies assigned while preserving readable counts and clickable, draggable cards.
+
 **0.2.36**
 
 - Correct the installer verification status endpoint and ensure failed-test process cleanup waits for exit. Publish the installer only after install, tray launch, reinstall and uninstall checks pass.
