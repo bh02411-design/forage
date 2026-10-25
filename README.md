@@ -78,6 +78,12 @@ History uses published releases from your configured GitHub repository. Cached h
 
 ### Changelog
 
+**0.2.39**
+
+- Tint duplicate mainboard and commander cards red across printings, with readable warning labels in stacks, grid and list.
+- Honor basic-land and rules-text exceptions, including finite copy limits. Exclude Considering and swap staging. Resolve missing card data to verify exceptions.
+- Preserve deck contents and the exactly-100-cards requirement.
+
 **0.2.38**
 
 - Dim collection artwork when all owned copies are assigned across decks. Cards with spare copies keep normal brightness.

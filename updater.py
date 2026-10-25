@@ -11,6 +11,7 @@ MAX_PACKAGE=20*1024*1024
 
 # Release notes stay in an existing updater file so older installers accept the package.
 CHANGELOG={
+ '0.2.39':['Tint duplicate mainboard and commander cards red using English-name identity across printings.','Honor basic lands, any-number and finite-copy Oracle exceptions; exclude Considering and swap staging, and flag unresolved rules for review.','Show duplicate labels in stacks, grid and list without changing cards or the 100-card total.'],
  '0.2.38':['Dim collection artwork when all owned copies are assigned across decks.','Keep cards with spare copies at normal brightness and show an accessible All copies assigned label without disabling cards.'],
  '0.2.37':['Add Manage decks with named deletion confirmation and a recoverable Deleted decks list.','Restore complete decks including cards, chats, history and preferences; deleted decks stop reserving collection cards.','Keep the app usable after deleting the last deck and preserve deleted decks in workspace backups.'],
  '0.2.36':['Publish the standalone Windows installer after corrected installation and tray verification.','Include bundled Python, shortcuts, clean starter data and the shared GitHub update channel.'],

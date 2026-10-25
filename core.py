@@ -1,5 +1,5 @@
 """Import, analysis, and deterministic deck edits. No AI needed for these operations."""
-import csv, io, re, math, copy, random, uuid
+import csv, io, re, math, copy, random, uuid, unicodedata
 
 def uid(): return uuid.uuid4().hex
 
@@ -53,6 +53,56 @@ def make_entry(name,qty,group='main'):
     land=key(name) in [key(n) for n in ['Forest','Swamp','Plains','Island','Mountain','Wastes','Snow-Covered Forest','Snow-Covered Swamp','Snow-Covered Plains','Snow-Covered Island','Snow-Covered Mountain']]
     return {'id':uid(),'name':name,'qty':qty,'zone':zone,'group':'Land' if land else group if g not in ['main','mainboard'] else 'Uncategorized','roles':['Land'] if land else [],'land':land,'mv':0 if land else None,'mdfc':False,'protected':False,'meta_source':'Imported name; metadata not resolved'}
 
+def english_card_name(card):
+    # Scryfall's name is English even for foreign-language printings.
+    return unicodedata.normalize('NFC',str(card.get('english_name') or card.get('name',''))).strip().casefold()
+
+def copy_limit(card):
+    name=english_card_name(card)
+    basics={'forest','swamp','plains','island','mountain','wastes'}
+    if name in basics or name.removeprefix('snow-covered ') in basics or re.search(r'^Basic\b[^—]*\bLand\b',card.get('type_line','')):
+        return None
+    words=dict(zip('zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen'.split(),range(20)))
+    words.update(dict(zip('twenty thirty forty fifty sixty seventy eighty ninety'.split(),range(20,100,10))))
+    text=card.get('oracle_text','') or ''
+    for match in re.finditer(r'\bA deck can have (any number of|up to ([a-z0-9 -]+)) cards named ([^\n]+?)\.(?=\s|$)',text,re.I):
+        if unicodedata.normalize('NFC',match[3]).strip().casefold()!=name:continue
+        if match[1].lower()=='any number of':return None
+        amount=match[2].lower()
+        if amount.isdigit():return int(amount)
+        parts=amount.replace('-',' ').split()
+        if len(parts)<=2 and all(part in words for part in parts):return sum(words[part] for part in parts)
+    return 1
+
+def duplicate_violations(deck):
+    staging=set(swap_category_names(deck).values())
+    cards=[c for c in deck.get('cards',[]) if c.get('zone')=='commander' or c.get('zone')=='main' and c.get('group') not in staging]
+    # English-name identity, with Oracle IDs linking resolved language variants.
+    aliases={}
+    for c in cards:
+        if c.get('oracle_id'):aliases.setdefault(c['oracle_id'],english_card_name(c))
+    for c in cards:
+        if c.get('oracle_id') and c.get('english_name'):aliases[c['oracle_id']]=english_card_name(c)
+    groups={}
+    for c in cards:
+        name=aliases.get(c.get('oracle_id'),english_card_name(c))
+        groups.setdefault(name,[]).append(c)
+    result=[]
+    for entries in groups.values():
+        qty=sum(c.get('qty',1) for c in entries)
+        if qty<=1:continue
+        # One resolved printing supplies the rules for all printings of that name.
+        limits=[copy_limit(c) for c in entries]
+        if None in limits:continue
+        limit=max(limits)
+        if qty<=limit:continue
+        name=entries[0].get('english_name') or entries[0]['name']
+        unknown=not any(c.get('oracle_text') is not None for c in entries)
+        message=f"{name}: {qty} copies; Commander limit {limit}."
+        if unknown:message+=' Resolve card data to check rules-text exceptions.'
+        result.append({'ids':[c['id'] for c in entries],'name':name,'quantity':qty,'limit':limit,'unresolved':unknown,'message':message})
+    return result
+
 def analysis(deck):
     staging=set(swap_category_names(deck).values())
     cards=[c for c in deck['cards'] if c['zone']=='commander' or c['zone']=='main' and c.get('group') not in staging]
@@ -76,8 +126,8 @@ def analysis(deck):
     if ids:
         off=[c['name'] for c in cards if c.get('color_identity') is not None and not set(c['color_identity'])<=ids]
         if off: warnings.append('Outside commander color identity: '+', '.join(off))
-    dupes=[c['name'] for c in cards if c['qty']>1 and 'Basic' not in c.get('type_line','') and key(c['name']) not in [key(x) for x in ['Forest','Swamp','Mountain','Plains','Island','Wastes','Snow-Covered Forest','Snow-Covered Swamp','Snow-Covered Plains','Snow-Covered Island','Snow-Covered Mountain']]]
-    if dupes: warnings.append('Review singleton exceptions: '+', '.join(dupes))
+    duplicate_cards=duplicate_violations(deck)
+    warnings.extend(item['message'] for item in duplicate_cards)
     return {'total':total,'lands':lands,'mdfc':mdfc,'average':round(sum(c['mv']*c['qty'] for c in known)/n,2) if n else None,'hist':hist,'roles':roles,'unknown':unknown,'warnings':warnings}
 
 def availability(state,name,exclude_deck=None):

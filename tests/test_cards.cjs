@@ -128,3 +128,17 @@ console.log('10 pending-decision checks passed.');
  assert.ok(!manaCostMarkup({mana_cost:'<img src=x>'}).includes('<img'));
  console.log('Checklist mana pips retain repeated, generic, hybrid, Phyrexian, variable and missing-cost distinctions.');
 }
+
+// Duplicate highlighting is driven by full-deck validation, never by visible rows.
+{
+ const issue={quantity:2,limit:1,message:'Sol Ring: 2 copies; Commander limit 1.',unresolved:false};
+ const card={id:'duplicate',name:'Sol Ring',qty:2};
+ const marked=tile(card,[],'deck',null,issue);
+ assert.match(marked,/duplicate-card/);assert.match(marked,/Duplicate · 2 copies \/ limit 1/);
+ assert.match(marked,/aria-label="Sol Ring, Sol Ring: 2 copies/);
+ assert.ok(!marked.includes('disabled'));assert.match(marked,/draggable="true"/);
+ assert.ok(!tile(card).includes('duplicate-card'));
+ assert.match(tile(card,[],'deck',null,{...issue,unresolved:true}),/Duplicate · verify rules/);
+ assert.ok(!tile(card,[],'deck',null,{...issue,message:'<script>'}).includes('<script>'));
+ console.log('Duplicate artwork, accessible labels and retained interactions passed.');
+}

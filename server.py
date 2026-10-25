@@ -3,12 +3,12 @@
 import argparse, base64, copy, datetime, html, json, os, re, secrets, sqlite3, threading, time, urllib.error, urllib.parse, urllib.request, webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from core import basic_land_plan, apply_basic_land_plan, swap_category_names, auto_category_candidate, remove_selected_cards, auto_categorize_card, uid, key, parse_import, make_entry, analysis, availability, mana_sample, apply_swap, category_names, normalize_category_changes, apply_category_changes, normalize_workspace_changes, apply_workspace_plan
+from core import basic_land_plan, apply_basic_land_plan, swap_category_names, auto_category_candidate, remove_selected_cards, auto_categorize_card, uid, key, parse_import, make_entry, analysis, duplicate_violations, availability, mana_sample, apply_swap, category_names, normalize_category_changes, apply_category_changes, normalize_workspace_changes, apply_workspace_plan
 from seed import initial_state
 import updater
 import launcher
 from advisor import normalize_cut_response, cut_request, check_cuts, cut_reply, FACT_FIELDS, ABILITIES, intents, catalog, commander_colors, evidence, GUIDANCE, check_recommendations, wants_draw_advice, preference_suggestion, card_facts, mana_value_filter, search_prompt
-SEARCH_FIELDS=['colors','keywords','set','rarity','layout','search_metadata_version']
+SEARCH_FIELDS=['english_name','oracle_id','colors','keywords','set','rarity','layout','search_metadata_version']
 ROOT=Path(__file__).resolve().parent
 DATA=Path(os.environ.get('FORAGE_DATA_DIR',str(ROOT/'data')))
 INSTANCE_ID=secrets.token_hex(12)
@@ -153,7 +153,7 @@ def card_data(raw):
     typ=raw.get('type_line',''); text=raw.get('oracle_text') or '\n\n'.join(f.get('oracle_text','') for f in faces)
     land='Land' in front.get('type_line','')
     mdfc=raw.get('layout')=='modal_dfc' and any('Land' in f.get('type_line','') for f in faces)
-    entry.update({'mv':raw.get('cmc'),'mana_cost':front.get('mana_cost',''),'type_line':typ,'oracle_text':text,'land':land,'mdfc':mdfc,'color_identity':raw.get('color_identity',[]),'image':(raw.get('image_uris') or front.get('image_uris') or {}).get('normal',''),'scryfall_uri':raw.get('scryfall_uri',''),'scryfall_id':raw['id'],'meta_source':'Scryfall lookup '+datetime.date.today().isoformat(),'legalities':raw.get('legalities',{}),'game_changer':raw.get('game_changer',False),'power':front.get('power'),'toughness':front.get('toughness')})
+    entry.update({'english_name':raw['name'],'oracle_id':raw.get('oracle_id'),'mv':raw.get('cmc'),'mana_cost':front.get('mana_cost',''),'type_line':typ,'oracle_text':text,'land':land,'mdfc':mdfc,'color_identity':raw.get('color_identity',[]),'image':(raw.get('image_uris') or front.get('image_uris') or {}).get('normal',''),'scryfall_uri':raw.get('scryfall_uri',''),'scryfall_id':raw['id'],'meta_source':'Scryfall lookup '+datetime.date.today().isoformat(),'legalities':raw.get('legalities',{}),'game_changer':raw.get('game_changer',False),'power':front.get('power'),'toughness':front.get('toughness')})
     colors=raw.get('colors')
     if colors is None and faces and all(isinstance(f.get('colors'),list) for f in faces):colors=sorted(set(x for f in faces for x in f['colors']))
     entry.update({'colors':colors,'keywords':raw.get('keywords'),'set':raw.get('set'),'rarity':raw.get('rarity'),'layout':raw.get('layout'),'search_metadata_version':1})
@@ -588,7 +588,8 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:return self.send_json({'error':str(exc)},400)
         if path=='/api/state':
             with LOCK: state=read_state()
-            state.pop('transient',None); return self.send_json({'state':state,'token':TOKEN})
+            duplicates={deck['id']:duplicate_violations(deck) for deck in state['decks']}
+            state.pop('transient',None); return self.send_json({'state':state,'token':TOKEN,'duplicate_violations':duplicates})
         if path=='/api/backup':
             with LOCK: state=read_state()
             return self.send_json(state)

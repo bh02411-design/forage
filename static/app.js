@@ -1,6 +1,7 @@
 'use strict';
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 let chatRenderedDeck=null;
+let duplicateWarnings={};
 let state,token,zone='main',view='workbench',pendingCard=null,pendingImage=null,busy=false,aiConnected=false;
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const norm=s=>s.toLowerCase().split(' // ')[0].replace(/[^a-z0-9]/g,'');
@@ -36,7 +37,7 @@ $('#physical-deck-checklist').onclick=physicalDeckChecklist;
 const safeUrl=s=>{try{const u=new URL(s);return u.protocol==='https:'?u.href:''}catch{return ''}};
 function toast(text){$('#toast').textContent=text;$('#toast').hidden=false;clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('#toast').hidden=true,5000)}
 async function api(path,payload){const options=payload===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json','X-Forage-Token':token},body:JSON.stringify(payload)};const r=await fetch('/api/'+path,options);let data;try{data=await r.json()}catch{throw Error('Server unavailable. Open Forage from the tray or Start menu, or restart its launcher.')}if(!r.ok)throw Error(data.error||'Request failed');return data}
-async function refresh(){const r=await api('state');state=r.state;token=r.token;render()}
+async function refresh(){const r=await api('state');state=r.state;duplicateWarnings=r.duplicate_violations||{};token=r.token;render()}
 async function mutate(path,payload){const r=await api(path,{deck:state.active,...payload});await refresh();return r}
 function modal(title,content){$('#modal').classList.toggle('card-modal',content.includes('class="card-detail"'));$('#modal-title').textContent=title;$('#modal-content').innerHTML=content;if(!$('#modal').open)$('#modal').showModal()}
 function closeModal(){$('#modal').close()}
@@ -58,6 +59,7 @@ function render(){
   const warnings=[];if(total!==100)warnings.push(`Deck contains ${total} cards including commander; expected 100.`);if(unknown)warnings.push(`${unknown} nonland cards need mana metadata. Curve is partial.`);if(!cards.some(c=>c.zone==='commander'))warnings.push('Assign your commander in card details.');
   if(!state.collection.length)warnings.push('Collection not imported: ownership and available copies are unknown.');
   const commanders=cards.filter(c=>c.zone==='commander'&&c.color_identity);if(commanders.length){const colors=new Set(commanders.flatMap(c=>c.color_identity));const off=cards.filter(c=>c.color_identity?.some(x=>!colors.has(x)));if(off.length)warnings.push('Outside commander color identity: '+off.map(c=>c.name).join(', '))}
+  warnings.push(...(duplicateWarnings[state.active]||[]).map(d=>d.message));
   $('#warnings').innerHTML=warnings.map(w=>`<div>↳ ${esc(w)}</div>`).join('');
   renderManaStats();renderDeck();renderChat();renderProposals();renderMemory();renderCollection();renderHistory();bindWorkspacePlans();
   $('#collection-count').textContent=state.collection.reduce((n,c)=>n+c.qty,0).toLocaleString();$('#memory-count').textContent=state.memories.length;
@@ -90,6 +92,7 @@ function syntaxKey(where){
 }
 function renderDeck(){
  $('#auto-categorize').title='Categorize unassigned cards on '+(zone==='main'?'Mainboard':'Considering');
+ const duplicateById=new Map((duplicateWarnings[state.active]||[]).flatMap(d=>d.ids.map(id=>[id,d])));
  const filter=$('#deck-search').value,board=ForageCards.boardCards(deck(),zone).filter(c=>!$('#needs-sleeving-only').checked||c.needs_sleeving);
  const result=ForageCards.search(board,filter),visible=new Set(result.matches.map(c=>c.id));
  const cards=board.filter(c=>c.zone==='commander'||visible.has(c.id));
@@ -101,7 +104,7 @@ function renderDeck(){
  const groupMarkup=([g,list],swap=false)=>{
   const pinned=list.length>0&&list.every(c=>c.zone==='commander');
   const heading=pinned?'<span title="Commander position is fixed first">Commander · pinned</span>':(swap||groupBy==='category')?`<button class="category-heading" data-edit-category="${esc(g)}" title="Edit category">${esc(g)} <span class="edit-pencil">✎</span></button>`:esc(g);
-  return `<section class="visual-group${pinned?' commander-group':''}" ${pinned?'data-pinned-commander="true"':`data-drop-group="${esc(g)}"`}><div class="group-label">${heading}<span>${list.reduce((n,c)=>n+c.qty,0)}</span></div><div class="group-cards">`+list.map(c=>{const markup=cardMode==='list'?`<button class="card-row" draggable="true" data-visual-card="${esc(c.id)}" data-card-source="deck"><span class="qty">${c.qty}</span><span class="card-name">${esc(c.name)}</span>${c.needs_sleeving?'<span class="sleeving-label" title="Needs sleeving">Sleeve</span>':''}${c.protected?'<span class="lock" title="Protected card">◆</span>':''}<span class="card-mv">${c.land?'◇':c.mv??'?'}</span></button>`:ForageCards.tile(c,state.collection);return swap?`<div class="swap-card-entry">${markup}</div>`:markup}).join('')+'</div></section>';
+  return `<section class="visual-group${pinned?' commander-group':''}" ${pinned?'data-pinned-commander="true"':`data-drop-group="${esc(g)}"`}><div class="group-label">${heading}<span>${list.reduce((n,c)=>n+c.qty,0)}</span></div><div class="group-cards">`+list.map(c=>{const markup=cardMode==='list'?`<button class="card-row${duplicateById.has(c.id)?' duplicate-card':''}" title="${esc(duplicateById.get(c.id)?.message||c.name)}" draggable="true" data-visual-card="${esc(c.id)}" data-card-source="deck"><span class="qty">${c.qty}</span><span class="card-name">${esc(c.name)}</span>${duplicateById.has(c.id)?'<span class="duplicate-label">Duplicate</span>':''}${c.needs_sleeving?'<span class="sleeving-label" title="Needs sleeving">Sleeve</span>':''}${c.protected?'<span class="lock" title="Protected card">◆</span>':''}<span class="card-mv">${c.land?'◇':c.mv??'?'}</span></button>`:ForageCards.tile(c,state.collection,'deck',null,duplicateById.get(c.id));return swap?`<div class="swap-card-entry">${markup}</div>`:markup}).join('')+'</div></section>';
  };
  $('#deck-list').innerHTML=entries.map(entry=>groupMarkup(entry)).join('')||'<div class="empty">Nothing here yet.<br>Import a list or drop a card.</div>';
  swapPanel.innerHTML='<div class="swap-panel-heading">SWAP STAGING · EXCLUDED FROM BOARD TOTALS</div>'+arranged.swaps.map(entry=>groupMarkup(entry,true)).join('');

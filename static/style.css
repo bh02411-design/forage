@@ -210,3 +210,10 @@ dialog.card-modal{width:min(1180px,96vw);max-width:96vw;max-height:94vh}
 /* Keep collection availability legible while dimming assigned artwork only. */
 .collection-card-grid .fully-assigned .art-frame>img,
 .collection-card-grid .fully-assigned .art-placeholder{filter:brightness(.45) saturate(.3)}
+
+/* Duplicate warnings preserve the art and readable quantity badges. */
+.card-visual.duplicate-card{outline:2px solid #e06464;outline-offset:-2px}
+.card-visual.duplicate-card .art-frame:before{content:'';position:absolute;inset:0;background:rgba(190,28,28,.38);z-index:1;pointer-events:none}
+.card-visual.duplicate-card .tile-badges{z-index:2}
+.duplicate-label{color:#ffabab!important;font-weight:600}
+.card-row.duplicate-card{background:#552020;border-color:#e06464}

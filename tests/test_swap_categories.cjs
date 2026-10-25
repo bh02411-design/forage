@@ -16,7 +16,7 @@ cards.push({id:'m',name:'Considering Incoming',qty:3,zone:'maybe',group:'Swap In
 assert.deepEqual(Cards.boardCards({cards},'maybe').map(c=>c.id),['i','o','m']);
 assert.equal(Cards.boardCards({cards},'main').length,5);
 const elements={};const el=s=>elements[s]??=( {value:'',hidden:false,innerHTML:'',contains:()=>false} );let bindings=[];
-const context={ForageCards:Cards,state:{collection:[]},deck:()=>({cards,categories:['a_Likely Add','Empty import artifact']}),zone:'main',cardMode:'stacks',groupBy:'mana',sortBy:'name',esc:s=>String(s),$:el,$$:()=>[],filterStatus:()=>{},bindVisualCards:e=>bindings.push(e)};
+const context={duplicateWarnings:{},ForageCards:Cards,state:{collection:[]},deck:()=>({cards,categories:['a_Likely Add','Empty import artifact']}),zone:'main',cardMode:'stacks',groupBy:'mana',sortBy:'name',esc:s=>String(s),$:el,$$:()=>[],filterStatus:()=>{},bindVisualCards:e=>bindings.push(e)};
 vm.createContext(context);const app=fs.readFileSync('static/app.js','utf8');vm.runInContext(app.slice(app.indexOf('function renderDeck(){'),app.indexOf('function findVisualCard(')),context);
 context.renderDeck();assert.equal(el('#swap-categories').hidden,false);assert.match(el('#swap-categories').innerHTML,/data-edit-category="Swap In"/);assert.match(el('#swap-categories').innerHTML,/data-drop-group="Swap Out"/);assert.equal(bindings.length,2);assert.doesNotMatch(el('#deck-list').innerHTML,/a_Likely Add|Empty import artifact|Incoming|Outgoing/);
 context.zone='maybe';context.renderDeck();assert.equal(el('#swap-categories').hidden,false);assert.match(el('#swap-categories').innerHTML,/Considering Incoming/);assert.doesNotMatch(el('#swap-categories').innerHTML,/swap-origin|>Mainboard<|>Considering</);assert.equal(el('#card-count').textContent,'0 cards');
@@ -58,3 +58,15 @@ assert.match(Cards.tile(cards[1]),/needs sleeving/);
 assert.doesNotMatch(Cards.tile({...cards[1],needs_sleeving:false}),/tile-sleeving/);
 el('#needs-sleeving-only').checked=false;
 console.log('Physical-deck markers render and the checklist filter selects only marked entries.');
+
+// Full-deck duplicate results survive searches and apply in every board display mode.
+context.duplicateWarnings={undefined:[{ids:['a'],quantity:2,limit:1,message:'Normal: 2 copies; Commander limit 1.',unresolved:false}]};
+context.zone='main';el('#deck-search').value='Normal';
+for(const mode of ['stacks','grid','list']){
+ context.cardMode=mode;context.renderDeck();
+ assert.match(el('#deck-list').innerHTML,/duplicate-card/);
+ assert.match(el('#deck-list').innerHTML,/Duplicate/);
+ assert.doesNotMatch(el('#swap-categories').innerHTML,/duplicate-card/);
+}
+context.duplicateWarnings={};context.renderDeck();assert.doesNotMatch(el('#deck-list').innerHTML,/duplicate-card/);
+console.log('Duplicate warnings remain visible under filters in stack, grid and list modes and clear after edits.');
