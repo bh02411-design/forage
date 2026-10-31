@@ -78,6 +78,11 @@ History uses published releases from your configured GitHub repository. Cached h
 
 ### Changelog
 
+**0.2.40**
+
+- Prevent nested artwork and text from competing with card-tile drag gestures.
+- Hide hover previews before a mouse press; retain keyboard previews and clear drag highlights after cancelled or completed drags.
+
 **0.2.39**
 
 - Tint duplicate mainboard and commander cards red across printings, with readable warning labels in stacks, grid and list.

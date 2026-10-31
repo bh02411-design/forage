@@ -124,9 +124,13 @@ function bindVisualCards(container){
  container.querySelectorAll('[data-visual-card]').forEach(button=>{
   const card=findVisualCard(button.dataset.visualCard,button.dataset.cardSource);if(!card)return;
   button.onclick=()=>{hideCardHover();button.dataset.cardSource==='collection'?showCandidate(card):editCard(card.id)};
-  button.addEventListener('dragstart',e=>{hideCardHover();e.dataTransfer.effectAllowed='copyMove';e.dataTransfer.setData('application/x-forage-card',JSON.stringify({id:card.id,source:button.dataset.cardSource,deck:state.active}));e.dataTransfer.setData('text/plain',card.name)});
-  button.addEventListener('mouseenter',()=>showCardHover(button,card));button.addEventListener('mouseleave',hideCardHover);
-  button.addEventListener('focus',()=>showCardHover(button,card));button.addEventListener('blur',hideCardHover);
+  // Hide before dragstart: focus/preview changes must not compete with the first press.
+  button.addEventListener('pointerdown',hideCardHover);
+  button.querySelectorAll('img').forEach(img=>{img.draggable=false});
+  button.addEventListener('dragstart',e=>{e.stopPropagation();button.dataset.dragging='true';e.dataTransfer.effectAllowed='copyMove';e.dataTransfer.setData('application/x-forage-card',JSON.stringify({id:card.id,source:button.dataset.cardSource,deck:state.active}));e.dataTransfer.setData('text/plain',card.name)});
+  button.addEventListener('dragend',()=>{delete button.dataset.dragging;hideCardHover();$$('.dragover,.category-dragover').forEach(el=>el.classList.remove('dragover','category-dragover'))});
+  button.addEventListener('mouseenter',e=>{if(!e.buttons&&!button.dataset.dragging)showCardHover(button,card)});button.addEventListener('mouseleave',hideCardHover);
+  button.addEventListener('focus',()=>{if(button.matches(':focus-visible')&&!button.dataset.dragging)showCardHover(button,card)});button.addEventListener('blur',hideCardHover);
  });
  container.querySelectorAll('img').forEach(img=>img.addEventListener('error',()=>{img.hidden=true;img.closest('.card-visual')?.classList.add('image-failed')}));
 }
