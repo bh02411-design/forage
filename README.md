@@ -46,6 +46,8 @@ For the one-time updater installation, stop Forage, replace program files from t
 
 ## Development and releases
 
+Card moves between categories use a compact save response and update the deck panels without reloading collection data or rebuilding chat. Moves save in order, and Undo snapshots remain on the server. Moves into or out of swap staging also refresh collection availability.
+
 The repository root contains the application. `.gitignore` excludes local data, caches, databases and builds. The bundled tests use synthetic workspaces, not personal deck snapshots.
 
 Run:

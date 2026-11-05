@@ -39,10 +39,28 @@ function toast(text){$('#toast').textContent=text;$('#toast').hidden=false;clear
 async function api(path,payload){const options=payload===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json','X-Forage-Token':token},body:JSON.stringify(payload)};const r=await fetch('/api/'+path,options);let data;try{data=await r.json()}catch{throw Error('Server unavailable. Open Forage from the tray or Start menu, or restart its launcher.')}if(!r.ok)throw Error(data.error||'Request failed');return data}
 async function refresh(){const r=await api('state');state=r.state;duplicateWarnings=r.duplicate_violations||{};token=r.token;render()}
 async function mutate(path,payload){const r=await api(path,{deck:state.active,...payload});await refresh();return r}
+let deckMoveQueue=Promise.resolve();
+function mutateDeckMove(path,payload){
+ const deckId=state.active;
+ // Preserve gesture order without reloading the collection or chat after each move.
+ const task=deckMoveQueue.then(async()=>{
+  const r=await api(path,{deck:deckId,...payload,deck_move_response:true});
+  const target=state.decks.find(d=>d.id===deckId);if(!target)return r;
+  const inventoryKey=d=>JSON.stringify(ForageCards.countedBoardCards(d,'main').map(c=>[c.id,c.qty]).sort());
+  const before=inventoryKey(target);
+  target.cards=r.deck_move.cards;target.categories=r.deck_move.categories;
+  target.history=r.deck_move.history;duplicateWarnings[deckId]=r.deck_move.duplicate_violations;
+  const inventoryChanged=before!==inventoryKey(target);
+  if(state.active===deckId){renderDeckSummary();renderManaStats();renderDeck();renderHistory()}
+  if(inventoryChanged)renderCollection();
+  return r;
+ });
+ deckMoveQueue=task.catch(()=>{});return task;
+}
 function modal(title,content){$('#modal').classList.toggle('card-modal',content.includes('class="card-detail"'));$('#modal-title').textContent=title;$('#modal-content').innerHTML=content;if(!$('#modal').open)$('#modal').showModal()}
 function closeModal(){$('#modal').close()}
 function stat(label,value,detail){return `<div class="stat"><div class="stat-label">${label}</div><div class="stat-value">${esc(value)}<small>${detail}</small></div></div>`}
-function render(){
+function renderDeckSummary(){
   syncViewSettings();
   $('#deck-select').innerHTML=state.decks.map(d=>`<option value="${d.id}" ${d.id===state.active?'selected':''}>${esc(d.name)}</option>`).join('');
   $('#deck-name').textContent=deck().name;$('#deck-source').textContent=deck().source;
@@ -61,6 +79,9 @@ function render(){
   const commanders=cards.filter(c=>c.zone==='commander'&&c.color_identity);if(commanders.length){const colors=new Set(commanders.flatMap(c=>c.color_identity));const off=cards.filter(c=>c.color_identity?.some(x=>!colors.has(x)));if(off.length)warnings.push('Outside commander color identity: '+off.map(c=>c.name).join(', '))}
   warnings.push(...(duplicateWarnings[state.active]||[]).map(d=>d.message));
   $('#warnings').innerHTML=warnings.map(w=>`<div>↳ ${esc(w)}</div>`).join('');
+}
+function render(){
+  renderDeckSummary();
   renderManaStats();renderDeck();renderChat();renderProposals();renderMemory();renderCollection();renderHistory();bindWorkspacePlans();
   $('#collection-count').textContent=state.collection.reduce((n,c)=>n+c.qty,0).toLocaleString();$('#memory-count').textContent=state.memories.length;
 }
@@ -154,7 +175,7 @@ async function internalDrop(item,destination,category=null){
  }else{
   const payload={id:c.id,action:'edit',zone:category==='Commander'?'commander':destination};
   if(category&&category!=='Commander')payload.group=category;
-  await mutate('card',payload);toast('Card moved. Role tags were preserved.');
+  await mutateDeckMove('card',payload);toast('Card moved. Role tags were preserved.');
  }
 }
 function renderChat(forceLatest=false){
@@ -358,7 +379,7 @@ function categoryDialog(name){
  $$('input[name="category-card"]').forEach(c=>c.onchange=syncSelection);syncSelection();
  $('#category-rename').onclick=()=>run(async()=>{const to=$('#category-name').value.trim();if(to===name){closeModal();return}await mutate('category',{changes:[{action:'rename',from:name,to}]});closeModal();toast('Category renamed. Undo is available.');});
  $('#category-delete').onclick=()=>run(async()=>{await mutate('category',{changes:[{action:'delete',from:name}]});closeModal();toast('Empty category removed.');});
- $('#category-move').onclick=()=>run(async()=>{await mutate('category',{changes:[{action:'move',cards:[...new Set(selected().map(c=>c.name))],ids:selected().map(c=>c.id),to:$('#category-target').value}]});closeModal();toast('Cards moved. Role tags were preserved.');});
+ $('#category-move').onclick=()=>run(async()=>{const button=$('#category-move');button.disabled=true;try{await mutateDeckMove('category',{changes:[{action:'move',cards:[...new Set(selected().map(c=>c.name))],ids:selected().map(c=>c.id),to:$('#category-target').value}]});closeModal();toast('Cards moved. Role tags were preserved.');}finally{button.disabled=false}});
  $('#category-remove').onclick=()=>run(async()=>{const chosen=selected();if(!chosen.length)return;$('#category-remove').disabled=true;await mutate('cards-remove',{ids:chosen.map(c=>c.id),category:name});closeModal();toast('Selected cards removed from this deck. Undo is available.');});
 }
 function allCategoryNames(){return [...new Set([...Object.values(ForageCards.swapCategoryNames(deck())),...(deck().categories||[]),...deck().cards.map(c=>c.group||(c.zone==='commander'?'Commander':'Uncategorized'))])].sort()}
