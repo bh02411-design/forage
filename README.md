@@ -46,6 +46,8 @@ For the one-time updater installation, stop Forage, replace program files from t
 
 ## Development and releases
 
+Card moves between categories use a compact save response and update the deck panels without reloading collection data or rebuilding chat. Moves save in order, and Undo snapshots remain on the server. Moves into or out of swap staging also refresh collection availability.
+
 The repository root contains the application. `.gitignore` excludes local data, caches, databases and builds. The bundled tests use synthetic workspaces, not personal deck snapshots.
 
 Run:
@@ -77,6 +79,12 @@ Selecting a version opens a review screen. Switching verifies the release hashes
 History uses published releases from your configured GitHub repository. Cached history and bundled notes remain readable when GitHub is unavailable; downloading another release still requires connectivity. Keep using a repository you trust.
 
 ### Changelog
+
+**0.2.41**
+
+- Reduce category-move delays by returning only deck cards, category names, history labels and duplicate warnings after a save.
+- Skip unrelated chat and collection redraws; refresh collection availability when board or swap-staging membership changes.
+- Save rapid moves in order and preserve Undo, role tags and deck-switch behavior.
 
 **0.2.40**
 

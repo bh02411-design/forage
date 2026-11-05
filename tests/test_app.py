@@ -130,6 +130,31 @@ class HttpTests(unittest.TestCase):
     def test_static_and_state(self):
         with self.request('/') as r:self.assertEqual(r.status,200);self.assertIn(b'forage',r.read())
         with self.request('/api/state') as r:self.assertEqual(json.load(r)['state']['version'],1)
+    def test_compact_card_move_keeps_full_undo_on_server(self):
+        state=server.read_state();deck=state['decks'][0];card=next(c for c in deck['cards'] if c['zone']=='main')
+        before=copy.deepcopy(deck['cards']);deck['chat']=[{'text':'large chat '*10000}]
+        state['collection']=[dict(core.make_entry('Collection fixture',1),oracle_text='text '*10000)]
+        server.write_state(state)
+        with self.request('/api/card',{'deck':deck['id'],'id':card['id'],'action':'edit','group':'Fast moves','zone':'main','deck_move_response':True}) as response:
+            compact=response.read();move=json.loads(compact)['deck_move']
+        changed=next(c for c in move['cards'] if c['id']==card['id'])
+        self.assertEqual(changed['group'],'Fast moves');self.assertEqual(changed['roles'],card['roles'])
+        self.assertNotIn('before',move['history'][-1]);self.assertNotIn('chat',move);self.assertNotIn('collection',move)
+        self.assertIn('duplicate_violations',move)
+        with self.request('/api/state') as response:full=response.read()
+        self.assertLess(len(compact),len(full)//2)
+        saved=server.read_state()['decks'][0];self.assertEqual(saved['history'][-1]['before'],before)
+        with self.request('/api/undo',{'deck':deck['id']}):pass
+        self.assertEqual(server.read_state()['decks'][0]['cards'],before)
+    def test_compact_bulk_category_move_and_validation(self):
+        deck=server.read_state()['decks'][0];card=next(c for c in deck['cards'] if c['zone']=='main')
+        payload={'deck':deck['id'],'deck_move_response':True,'changes':[{'action':'move','cards':[card['name']],'ids':[card['id']],'to':'New category'}]}
+        with self.request('/api/category',payload) as response:move=json.load(response)['deck_move']
+        self.assertIn('New category',move['categories'])
+        self.assertEqual(next(c for c in move['cards'] if c['id']==card['id'])['group'],'New category')
+        saved=server.read_state();payload['changes'][0]['ids']=['missing']
+        with self.assertRaises(urllib.error.HTTPError):self.request('/api/category',payload)
+        self.assertEqual(server.read_state(),saved)
     def test_version_selection_requires_updated_launcher_before_download(self):
         with patch.dict(os.environ,{'FORAGE_VERSION_SWITCH':'','FORAGE_LAUNCHER':'1'}),patch.object(server.updater,'stage') as stage:
             with self.assertRaises(urllib.error.HTTPError) as response:self.request('/api/updates',{'action':'stage','version':'0.2.8'})

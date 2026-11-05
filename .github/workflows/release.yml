@@ -34,6 +34,7 @@ jobs:
       - run: node --check static/app.js
       - run: node tests/test_cards.cjs
       - run: node tests/test_drag.cjs
+      - run: node tests/test_move_performance.cjs
       - run: node tests/test_search.cjs
       - run: node tests/test_collection_sort.cjs
       - run: node tests/test_category_selection.cjs

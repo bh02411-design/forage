@@ -888,6 +888,12 @@ class Handler(BaseHTTPRequestHandler):
                 elif path=='/api/sample': return self.send_json(mana_sample(deck))
                 else:raise ValueError('Unknown endpoint.')
                 write_state(state)
+                if payload.get('deck_move_response') and path in ['/api/card','/api/category']:
+                    # Undo snapshots remain on disk; the board only needs history labels.
+                    return self.send_json({'ok':True,'deck_move':{
+                        'cards':deck['cards'],'categories':deck.get('categories',[]),
+                        'history':[{k:h[k] for k in ['id','type','summary'] if k in h} for h in deck['history']],
+                        'duplicate_violations':duplicate_violations(deck)}})
             return self.send_json({'ok':True})
         except Exception as e:return self.send_json({'error':str(e)},400)
 
