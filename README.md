@@ -80,6 +80,12 @@ History uses published releases from your configured GitHub repository. Cached h
 
 ### Changelog
 
+**0.2.41**
+
+- Reduce category-move delays by returning only deck cards, category names, history labels and duplicate warnings after a save.
+- Skip unrelated chat and collection redraws; refresh collection availability when board or swap-staging membership changes.
+- Save rapid moves in order and preserve Undo, role tags and deck-switch behavior.
+
 **0.2.40**
 
 - Prevent nested artwork and text from competing with card-tile drag gestures.
