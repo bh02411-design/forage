@@ -222,3 +222,10 @@ dialog.card-modal{width:min(1180px,96vw);max-width:96vw;max-height:94vh}
 .card-visual,.card-row{user-select:none;-webkit-user-select:none}
 .card-visual>*,.card-row>*{pointer-events:none}
 .card-visual img{-webkit-user-drag:none}
+
+/* Physical collection over-allocation: visible on every affected deck's mainboard. */
+.card-visual.cross-deck-conflict{outline:2px solid #e06464;outline-offset:-2px}
+.card-visual.cross-deck-conflict .art-frame:before{content:'';position:absolute;inset:0;background:rgba(190,28,28,.38);z-index:1;pointer-events:none}
+.card-visual.cross-deck-conflict .tile-badges{z-index:2}
+.cross-deck-label{color:#ffabab!important;font-weight:600}
+.card-row.cross-deck-conflict{background:#552020;border-color:#e06464}
