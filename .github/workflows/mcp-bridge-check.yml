@@ -1,0 +1,25 @@
+name: ChatGPT MCP bridge tests
+
+on:
+  pull_request:
+    paths:
+      - "mcp_bridge.py"
+      - "tests/test_mcp_bridge.py"
+      - ".github/workflows/mcp-bridge-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Compile bridge
+        run: python -m py_compile mcp_bridge.py
+      - name: Test MCP requests and ownership safeguards
+        run: python -m unittest discover -s tests -p 'test_mcp_bridge.py' -v
