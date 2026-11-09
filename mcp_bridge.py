@@ -11,7 +11,7 @@ import sys
 import urllib.error
 import urllib.request
 
-MAX_BYTES = 12 * 1024 * 1024
+MAX_BYTES = 64 * 1024 * 1024  # Local read cap; only small tool results cross the tunnel.
 PROTOCOL_VERSION = "2025-06-18"
 
 
@@ -30,15 +30,15 @@ def integer(value, default, low, high):
 def read_workspace():
     port = integer(os.environ.get("FORAGE_PORT", "8765"), 8765, 1, 65535)
     # Fixed loopback host/path; cannot be redirected by an MCP tool argument.
-    url = f"http://127.0.0.1:{port}/api/state"
+    url = f"http://127.0.0.1:{port}/api/mcp-state"
     request = urllib.request.Request(url, headers={"Accept": "application/json"})
     with urllib.request.urlopen(request, timeout=8) as response:
         if response.geturl() != url:
             raise ValueError("Unexpected redirect from Forage")
         body = response.read(MAX_BYTES + 1)
         if len(body) > MAX_BYTES:
-            raise ValueError("Forage workspace exceeds bridge size limit")
-    # Do not return the API's CSRF token, settings, chat history, or memories.
+            raise ValueError("Forage MCP snapshot exceeds 64 MB local read limit")
+    # The dedicated endpoint excludes CSRF tokens, settings, chats, and memories.
     return json.loads(body)["state"]
 
 
