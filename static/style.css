@@ -223,3 +223,7 @@ dialog.card-modal{width:min(1180px,96vw);max-width:96vw;max-height:94vh}
 .card-visual>*,.card-row>*{pointer-events:none}
 .card-visual img{-webkit-user-drag:none}
 
+
+/* ChatGPT replaces the legacy conversation panel. Give the deck the full workspace. */
+.workspace{grid-template-columns:minmax(0,1fr)!important}
+.workspace .card-board{height:clamp(550px,72vh,1100px)}
