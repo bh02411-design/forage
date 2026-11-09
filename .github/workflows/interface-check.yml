@@ -1,0 +1,31 @@
+name: Forage interface checks
+on:
+  pull_request:
+    paths:
+      - "static/index.html"
+      - "static/app.js"
+      - "static/style.css"
+      - "tests/test_chat_ui_removed.cjs"
+      - ".github/workflows/interface-check.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate JavaScript syntax
+        run: node --check static/app.js
+      - name: Confirm chatbot interface is removed
+        run: node tests/test_chat_ui_removed.cjs
+      - name: Check card and UI behavior
+        run: |
+          node tests/test_cards.cjs
+          node tests/test_render.cjs
+          node tests/test_drag.cjs
+          node tests/test_category_selection.cjs
+          node tests/test_swap_categories.cjs
