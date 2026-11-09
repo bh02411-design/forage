@@ -1,8 +1,9 @@
 """Regression tests for the private, read-only ChatGPT connector."""
 import io
 import json
+import os
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, call, patch
 import mcp_bridge as bridge
 
 
@@ -85,35 +86,113 @@ class BridgeTests(unittest.TestCase):
         self.assertTrue(all(tool["annotations"]["readOnlyHint"] for tool in messages[1]["result"]["tools"]))
         self.assertNotIn("never-expose-this", output.getvalue())
 
-    def test_workspace_uses_private_compact_endpoint(self):
-        class FakeResponse:
-            def __init__(self, url):
-                self.url = url
-            def __enter__(self):
-                return self
-            def __exit__(self, *args):
-                return False
-            def geturl(self):
-                return self.url
-            def read(self, size):
-                return json.dumps({'state': fixture()}).encode('utf-8')
-
-        observed = []
-        def open_request(request, timeout=8):
-            observed.append(request.full_url)
-            return FakeResponse(request.full_url)
-
-        with patch.object(bridge.urllib.request, 'urlopen', side_effect=open_request):
-            result = bridge.read_workspace()
-        self.assertEqual(result['active'], 'frog')
-        self.assertEqual(observed, ['http://127.0.0.1:8765/api/mcp-state'])
-        self.assertGreater(bridge.MAX_BYTES, 12 * 1024 * 1024)
-
     def test_no_credential_or_arbitrary_url_arguments(self):
         for tool in bridge.TOOLS:
             self.assertNotIn("url", tool["inputSchema"]["properties"])
             self.assertNotIn("token", tool["inputSchema"]["properties"])
         self.assertEqual(bridge.normalize("Dour Port-Mage"), bridge.normalize("Dour Port Mage"))
+
+
+class WorkspaceReadTests(unittest.TestCase):
+    def setUp(self):
+        connection_patch = patch.object(bridge.http.client, "HTTPConnection")
+        self.connection_factory = connection_patch.start()
+        self.addCleanup(connection_patch.stop)
+        self.connection = self.connection_factory.return_value
+        env_patch = patch.dict(os.environ, {"FORAGE_PORT": "8765", "FORAGE_MCP_MAX_MIB": ""})
+        env_patch.start()
+        self.addCleanup(env_patch.stop)
+
+    def response(self, body, *, status=200, length=None):
+        response = MagicMock(status=status, length=length)
+        response.__enter__.return_value = response
+        response.read.side_effect = io.BytesIO(body).read
+        return response
+
+    def respond(self, body, *, status=200, length=None):
+        response = self.response(body, status=status, length=length)
+        self.connection.getresponse.return_value = response
+        return response
+
+    def test_large_workspace_through_mcp_tools(self):
+        state = {
+            "active": "deck-1",
+            "decks": [{"id": "deck-1", "name": "Example", "cards": [
+                {"name": "Island", "zone": "main", "qty": 2},
+            ]}],
+            "collection": [{"name": "Island", "qty": 3}],
+            "settings": {"private_setting": "hidden-setting"},
+            "chat": "x" * (12 * bridge.MIB),
+        }
+        body = json.dumps({"state": state, "token": "hidden-token"}).encode()
+
+        for name, arguments in (
+            ("list_decks", {}),
+            ("search_collection", {"query": "island", "limit": 1}),
+        ):
+            with self.subTest(name=name):
+                missing = self.response(b"", status=404)
+                response = self.response(body)
+                self.connection.getresponse.side_effect = [missing, response]
+                self.connection.request.reset_mock()
+                request = {"id": 1, "method": "tools/call",
+                           "params": {"name": name, "arguments": arguments}}
+                output = io.StringIO()
+                bridge.serve([json.dumps(request)], output)
+                wire = output.getvalue()
+                self.assertNotIn("hidden-token", wire)
+                self.assertNotIn("hidden-setting", wire)
+                result = json.loads(json.loads(wire)["result"]["content"][0]["text"])
+                if name == "list_decks":
+                    self.assertEqual(result["decks"][0]["mainboard_count"], 2)
+                else:
+                    self.assertEqual(result["cards"][0]["availability"]["available"], 1)
+                response.read.assert_called_once_with(64 * bridge.MIB + 1)
+                self.connection_factory.assert_called_with("127.0.0.1", 8765, timeout=8)
+                self.assertEqual(self.connection.request.call_args_list, [
+                    call("GET", "/api/mcp-state", headers={"Accept": "application/json"}),
+                    call("GET", "/api/state", headers={"Accept": "application/json"}),
+                ])
+                missing.read.assert_not_called()
+
+    def test_returns_only_tool_state_fields(self):
+        self.respond(b'{"token":"secret","state":{"active":null,"decks":[],"collection":[],"settings":{}}}')
+        self.assertEqual(bridge.read_workspace(), {"active": None, "decks": [], "collection": []})
+        self.connection.request.assert_called_once_with(
+            "GET", "/api/mcp-state", headers={"Accept": "application/json"})
+
+    def test_rejects_declared_oversize_before_read(self):
+        response = self.respond(b"", length=64 * bridge.MIB + 1)
+        with self.assertRaisesRegex(ValueError, r"exceeds bridge size limit \(64 MiB\)"):
+            bridge.read_workspace()
+        response.read.assert_not_called()
+        self.connection.close.assert_called_once()
+
+    def test_checks_actual_size_and_clamps_override(self):
+        with patch.dict(os.environ, {"FORAGE_MCP_MAX_MIB": "999"}), patch.object(bridge, "MIB", 1):
+            body = b'{"state":{}}'.ljust(128, b" ")
+            response = self.respond(body)
+            self.assertEqual(bridge.read_workspace(), {})
+            response.read.assert_called_once_with(129)
+            response = self.respond(body + b" ")
+            with self.assertRaisesRegex(ValueError, r"exceeds bridge size limit \(128 MiB\)"):
+                bridge.read_workspace()
+            response.read.assert_called_once_with(129)
+
+    def test_redirect_is_rejected_without_another_request(self):
+        response = self.respond(b"", status=302)
+        with self.assertRaisesRegex(ValueError, "Forage workspace request failed"):
+            bridge.read_workspace()
+        self.connection.request.assert_called_once()
+        response.read.assert_not_called()
+        self.connection.close.assert_called_once()
+
+    def test_invalid_response_does_not_include_payload_in_error(self):
+        for body in (b'{"token":"secret",', b"[]", b'{"state":"secret"}', b"\xff"):
+            with self.subTest(body=body):
+                self.respond(body)
+                with self.assertRaisesRegex(ValueError, "^Invalid Forage workspace response$"):
+                    bridge.read_workspace()
 
 
 if __name__ == "__main__":
