@@ -13,6 +13,7 @@ def fixture():
             {"name": "Dour Port-Mage", "qty": 1, "color_identity": ["B"]},
             {"name": "Ponder", "qty": 1, "color_identity": ["U"], "legalities": {"commander": "legal"}},
             {"name": "Forest", "qty": 3, "color_identity": []},
+            {"name": "Dark Ritual", "qty": 1, "color_identity": ["B"], "legalities": {"commander": "legal"}},
         ],
         "decks": [
             {"id": "frog", "name": "Frogs", "cards": [
@@ -59,9 +60,12 @@ class BridgeTests(unittest.TestCase):
         self.assertFalse(result["saved"])
         self.assertTrue(result["ready_to_consider"])
         self.assertEqual(json.dumps(state, sort_keys=True), before)
-        bad = bridge.propose_swap({"add": "Dour Port-Mage", "cut": "Island"}, state)
-        self.assertIn("No unassigned owned copy", bad["warnings"])
+        with self.assertRaisesRegex(ValueError, "already on the mainboard"):
+            bridge.propose_swap({"add": "Dour Port-Mage", "cut": "Island"}, state)
+        bad = bridge.propose_swap({"add": "Dark Ritual", "cut": "Island"}, state)
         self.assertIn("outside commander color identity", bad["warnings"])
+        missing = bridge.propose_swap({"add": "Missing Card", "cut": "Island"}, state)
+        self.assertIn("Card not found in imported collection", missing["warnings"])
 
     def test_stdio_protocol(self):
         requests = [
