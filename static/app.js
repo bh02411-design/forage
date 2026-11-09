@@ -1,8 +1,7 @@
 'use strict';
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
-let chatRenderedDeck=null;
 let duplicateWarnings={};
-let state,token,zone='main',view='workbench',pendingCard=null,pendingImage=null,busy=false,aiConnected=false;
+let state,token,zone='main',view='workbench',busy=false,aiConnected=false;
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const norm=s=>s.toLowerCase().split(' // ')[0].replace(/[^a-z0-9]/g,'');
 const uiRead=(k,fallback)=>{try{return localStorage.getItem('forage.'+k)||fallback}catch{return fallback}};
@@ -16,7 +15,7 @@ function setSidebarCollapsed(collapsed){
 }
 setSidebarCollapsed(uiRead('sidebarCollapsed','no')==='yes');
 $('#sidebar-toggle').onclick=()=>setSidebarCollapsed(!$('.shell').classList.contains('sidebar-collapsed'));
-let cardMode=uiRead('cardMode','stacks'),groupBy=uiRead('groupBy','category'),sortBy=uiRead('sortBy','name'),collectionMode=uiRead('collectionMode','grid'),collectionSort=uiRead('collectionSort','name'),collectionDirection=uiRead('collectionDirection','asc'),collectionLimit=60,deckExpanded=false;
+let cardMode=uiRead('cardMode','stacks'),groupBy=uiRead('groupBy','category'),sortBy=uiRead('sortBy','name'),collectionMode=uiRead('collectionMode','grid'),collectionSort=uiRead('collectionSort','name'),collectionDirection=uiRead('collectionDirection','asc'),collectionLimit=60;
 if(!['name','mana','color','type','rarity','owned','available'].includes(collectionSort))collectionSort='name';
 if(!['asc','desc'].includes(collectionDirection))collectionDirection='asc';
 if(!['stacks','grid','list'].includes(cardMode))cardMode='stacks';
@@ -271,7 +270,7 @@ async function handleDrop(e){e.preventDefault();e.stopPropagation();e.currentTar
 function bindDrop(el){el.addEventListener('dragover',e=>{e.preventDefault();el.classList.add('dragover')});el.addEventListener('dragleave',()=>el.classList.remove('dragover'));el.addEventListener('drop',handleDrop)}
 function updateAIStatus(){}
 async function probeModels(){const r=await api('models');aiConnected=!!r.models.length;updateAIStatus();return r.models}
-function settingsDialog(){const s=state.settings;modal('Local AI & settings',`<p class="modal-note">Run LM Studio on this PC, load a model, and start its local server. Forage sends your active deck, applicable memories, recent conversation, excerpts of earlier requests, and relevant local collection search results to that loopback server. No cloud AI endpoint is accepted.</p><label class="field">Local API address<input id="lm-url" value="${esc(s.lm_url)}"></label><label class="field">Model identifier<input id="lm-model" value="${esc(s.model)}" placeholder="Choose a model after checking connection" list="model-options"><datalist id="model-options"></datalist></label><button id="check-ai" class="button secondary">Check connection & list models</button><div id="settings-status" class="modal-note"></div><label class="field"><input id="collection-only" type="checkbox" ${s.collection_only?'checked':''}>Require an available owned copy when accepting a swap</label><p class="modal-note">Turn this off only for deliberate wishlist changes. Collection assignments only cover decks you have imported. AI-generated advice and role matches still need your review.</p><p><button id="updates-open" class="button secondary">Application updates</button> <button id="desktop-open" class="button secondary">Windows tray & startup</button></p><div class="modal-actions"><button id="save-settings" class="button primary">Save settings</button><label class="button secondary">Restore backup<input id="restore-file" type="file" accept=".json" hidden></label></div><p class="modal-note">Backups include your decks, chats, and memory. Before restoring, Forage saves an additional copy of the current workspace in its data folder.</p>`);
+function settingsDialog(){const s=state.settings;modal('Local AI & settings',`<p class="modal-note">Local AI is optional for identifying dropped card images with a vision-capable model. Deck building, collection management, and ChatGPT access do not require LM Studio. No cloud AI endpoint is accepted.</p><label class="field">Local API address<input id="lm-url" value="${esc(s.lm_url)}"></label><label class="field">Model identifier<input id="lm-model" value="${esc(s.model)}" placeholder="Choose a model after checking connection" list="model-options"><datalist id="model-options"></datalist></label><button id="check-ai" class="button secondary">Check connection & list models</button><div id="settings-status" class="modal-note"></div><label class="field"><input id="collection-only" type="checkbox" ${s.collection_only?'checked':''}>Require an available owned copy when accepting a swap</label><p class="modal-note">Turn this off only for deliberate wishlist changes. Collection assignments only cover decks you have imported. Imported collection ownership may be incomplete.</p><p><button id="updates-open" class="button secondary">Application updates</button> <button id="desktop-open" class="button secondary">Windows tray & startup</button></p><div class="modal-actions"><button id="save-settings" class="button primary">Save settings</button><label class="button secondary">Restore backup<input id="restore-file" type="file" accept=".json" hidden></label></div><p class="modal-note">Backups include your decks, chats, and memory. Before restoring, Forage saves an additional copy of the current workspace in its data folder.</p>`);
  $('#updates-open').onclick=()=>run(updatesDialog);
  $('#desktop-open').onclick=()=>run(desktopDialog);
  $('#check-ai').onclick=async()=>{try{await mutate('settings',{lm_url:$('#lm-url').value,model:$('#lm-model').value,collection_only:$('#collection-only').checked});const models=await probeModels();$('#model-options').innerHTML=models.map(m=>`<option value="${esc(m.id)}"></option>`).join('');if(models.length&&!$('#lm-model').value)$('#lm-model').value=models[0].id;$('#settings-status').textContent=models.length?models.length+' model(s) found. Select the intended chat model and save.':'Server reached; no models found. Load a model in LM Studio.';}catch(e){$('#settings-status').textContent=e.message;aiConnected=false;updateAIStatus()}};
@@ -325,7 +324,7 @@ function exportDeckDialog(){
 $('#export').onclick=()=>run(exportDeckDialog);
 $('#sample').onclick=()=>run(sample);bindDrop($('#deck-drop'));
 window.addEventListener('dragover',e=>e.preventDefault());window.addEventListener('drop',e=>e.preventDefault());
-refresh().then(()=>{probeModels().catch(()=>updateAIStatus())}).catch(e=>toast(e.message));
+refresh().catch(e=>toast(e.message));
 
 $('#collection-enrich').onclick=()=>run(async()=>{
  const button=$('#collection-enrich');button.disabled=true;
