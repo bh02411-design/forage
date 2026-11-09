@@ -258,6 +258,20 @@ function showCandidate(c,target='maybe'){
  modal('Confirm recognized card',cardPreview(c,`<p class="modal-note">Check the card identity before adding. Ownership is not changed.</p><div class="modal-actions"><button id="candidate-maybe" class="button secondary">Add to Considering</button><button id="candidate-main" class="button secondary">Add to Mainboard</button></div>`));
  for(const [id,board] of [['candidate-maybe','maybe'],['candidate-main','main']])$('#'+id).onclick=()=>run(async()=>{await mutate('card',{action:'add',card:c,zone:board});closeModal();toast('Added to '+(board==='main'?'Mainboard':'Considering')+'.')});
 }
+function lookupDialog(){
+ modal('Find a card',`<form id="lookup-form"><label class="field">Card name<input id="lookup-name" placeholder="For example: Experimental Confectioner" autofocus></label><button class="button primary">Look up card</button></form><p class="modal-note">Looks up card text and an image on Scryfall. You can also paste a Scryfall or EDHREC card link.</p><div id="lookup-error" class="error"></div>`);
+ const input=$('#lookup-name'),status=$('#lookup-error');
+ $('#lookup-form').onsubmit=async event=>{
+  event.preventDefault();
+  status.textContent='Looking up…';
+  try{
+   const value=input.value.trim();
+   const result=value.includes('://')?await api('drop',{text:value}):await api('lookup?name='+encodeURIComponent(value));
+   showCandidate(result.card);
+  }catch(error){status.textContent=error.message}
+ };
+ input.focus();
+}
 async function imageFile(file){
  if(!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error('Use PNG, JPEG or WebP.');
  if(file.size>6*1024*1024)throw Error('Use an image smaller than 6 MB.');
