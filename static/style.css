@@ -212,13 +212,14 @@ dialog.card-modal{width:min(1180px,96vw);max-width:96vw;max-height:94vh}
 .collection-card-grid .fully-assigned .art-placeholder{filter:brightness(.45) saturate(.3)}
 
 /* Duplicate warnings preserve the art and readable quantity badges. */
-.card-visual.duplicate-card{outline:2px solid #e06464;outline-offset:-2px}
-.card-visual.duplicate-card .art-frame:before{content:'';position:absolute;inset:0;background:rgba(190,28,28,.38);z-index:1;pointer-events:none}
-.card-visual.duplicate-card .tile-badges{z-index:2}
-.duplicate-label{color:#ffabab!important;font-weight:600}
-.card-row.duplicate-card{background:#552020;border-color:#e06464}
+.card-visual.duplicate-card,.card-visual.cross-deck-conflict{outline:2px solid #e06464;outline-offset:-2px}
+.card-visual.duplicate-card .art-frame:before,.card-visual.cross-deck-conflict .art-frame:before{content:'';position:absolute;inset:0;background:rgba(190,28,28,.38);z-index:1;pointer-events:none}
+.card-visual.duplicate-card .tile-badges,.card-visual.cross-deck-conflict .tile-badges{z-index:2}
+.duplicate-label,.cross-deck-label{color:#ffabab!important;font-weight:600}
+.card-row.duplicate-card,.card-row.cross-deck-conflict{background:#552020;border-color:#e06464}
 
 /* The tile owns the drag; artwork and text must not start native drags. */
 .card-visual,.card-row{user-select:none;-webkit-user-select:none}
 .card-visual>*,.card-row>*{pointer-events:none}
 .card-visual img{-webkit-user-drag:none}
+

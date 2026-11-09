@@ -105,10 +105,32 @@ function manaStats(cards,includeNonlands=true){
  const totalMV=known.reduce((n,c)=>n+c.mv*(Number(c.qty)||1),0),spellCount=known.reduce((n,c)=>n+(Number(c.qty)||1),0);
  return {rows,costTotal,productionTotal,totalMV,averageMV:spellCount?totalMV/spellCount:null,unknownMV:spells.length-known.length,missingCosts,unknownSources,conditionalSources:[...new Set(conditionalSources)],optionalMdfcs};
 }
-function tile(card,collection=[],source='deck',availability=null,duplicate=null){
+function crossDeckConflicts(collection=[],decks=[]){
+ // An assignment is a physical copy only on Mainboard or Commander, never Considering.
+ // The same normalized name is shared across printings and split-card faces.
+ if(!collection.length)return new Map(); // Ownership is unknown until a collection is imported.
+ const counts=inventory(collection,decks),usage=new Map();
+ for(const deck of decks)for(const card of deck.cards||[]){
+  if(!['main','commander'].includes(card.zone))continue;
+  const name=norm(card.name),qty=Number(card.qty)||0;
+  if(qty<=0)continue;
+  if(!usage.has(name))usage.set(name,new Map());
+  usage.get(name).set(deck.id,(usage.get(name).get(deck.id)||0)+qty);
+ }
+ const conflicts=new Map();
+ for(const [name,byDeck] of usage){
+  const stock=counts.get(name);if(!stock||stock.assigned<=stock.owned)continue;
+  const names=decks.filter(d=>byDeck.has(d.id)).map(d=>d.name||'Unnamed deck');
+  const message=`${stock.owned} owned · ${stock.assigned} assigned across ${names.length} ${names.length===1?'deck':'decks'}: ${names.join(', ')}`;
+  conflicts.set(name,{owned:stock.owned,assigned:stock.assigned,deckNames:names,message});
+ }
+ return conflicts;
+}
+function tile(card,collection=[],source='deck',availability=null,duplicate=null,conflict=null){
  const image=art(card,collection);const qty=card.qty??1;
  const fullyAssigned=source==='collection'&&availability&&availability.owned>0&&availability.free===0;
- return `<button class="card-visual ${image?'has-art':'no-art'}${fullyAssigned?' fully-assigned':''}${duplicate?' duplicate-card':''}" draggable="true" data-visual-card="${escape(card.id)}" data-card-source="${source}" aria-label="${escape(card.name)}${duplicate?', '+escape(duplicate.message):''}${fullyAssigned?', all copies assigned to decks':''}${card.protected?', protected':''}${card.needs_sleeving?', needs sleeving':''}" title="${escape(duplicate?duplicate.message:card.name)}"><span class="art-frame">${image?`<img src="${escape(image)}" draggable="false" loading="lazy" decoding="async" alt="${escape(card.name)}">`:`<span class="art-placeholder"><span class="placeholder-symbol">✳</span><strong>${escape(card.name)}</strong><small>Resolve card data for artwork</small></span>`}<span class="tile-badges"><span class="tile-quantity">${qty}×</span>${card.protected?'<span class="tile-protected" title="Protected">◆</span>':''}</span></span>${card.needs_sleeving?'<span class="tile-sleeving">Needs sleeving</span>':''}<span class="tile-caption"><strong>${escape(card.name)}</strong>${duplicate?`<small class="duplicate-label">${duplicate.unresolved?'Duplicate · verify rules':`Duplicate · ${duplicate.quantity} copies / limit ${duplicate.limit}`}</small>`:''}<small>${availability?`${availability.owned} owned · ${availability.free} unassigned${fullyAssigned?' · All copies assigned':''}`:card.land?'Land':'MV '+(card.mv??'?')}</small></span></button>`;
+ const conflicted=source==='deck'&&!!conflict;
+ return `<button class="card-visual ${image?'has-art':'no-art'}${fullyAssigned?' fully-assigned':''}${duplicate?' duplicate-card':''}${conflicted?' cross-deck-conflict':''}" draggable="true" data-visual-card="${escape(card.id)}" data-card-source="${source}" aria-label="${escape(card.name)}${duplicate?', '+escape(duplicate.message):''}${conflicted?', '+escape(conflict.message):''}${fullyAssigned?', all copies assigned to decks':''}${card.protected?', protected':''}${card.needs_sleeving?', needs sleeving':''}" title="${escape([duplicate?.message,conflict?.message].filter(Boolean).join(' | ')||card.name)}"><span class="art-frame">${image?`<img src="${escape(image)}" draggable="false" loading="lazy" decoding="async" alt="${escape(card.name)}">`:`<span class="art-placeholder"><span class="placeholder-symbol">✳</span><strong>${escape(card.name)}</strong><small>Resolve card data for artwork</small></span>`}<span class="tile-badges"><span class="tile-quantity">${qty}×</span>${card.protected?'<span class="tile-protected" title="Protected">◆</span>':''}</span></span>${card.needs_sleeving?'<span class="tile-sleeving">Needs sleeving</span>':''}<span class="tile-caption"><strong>${escape(card.name)}</strong>${duplicate?`<small class="duplicate-label">${duplicate.unresolved?'Duplicate · verify rules':`Duplicate · ${duplicate.quantity} copies / limit ${duplicate.limit}`}</small>`:''}${conflicted?`<small class="cross-deck-label">Collection conflict · ${conflict.assigned} assigned / ${conflict.owned} owned</small>`:''}<small>${availability?`${availability.owned} owned · ${availability.free} unassigned${fullyAssigned?' · All copies assigned':''}`:card.land?'Land':'MV '+(card.mv??'?')}</small></span></button>`;
 }
 function recommendation(rec,collection=[],cards=[],proposals=[]){
  const c=rec.card,p=[...proposals].reverse().find(p=>norm(p.add)===norm(c.name)&&p.status==='pending');
@@ -217,5 +239,5 @@ function sortCollection(cards,by='name',direction='asc',counts=new Map()){
   return result*sign||collator.compare(a.card.name,b.card.name);
  }).map(row=>row.card);
 }
-const api={manaStats,groups,onBoard,countedBoardCards,manaCostMarkup,archidektExport,boardCards,boardGroups,swapCategoryNames,art,tile,groupName,recommendation,pendingDecisions,search,compileSearch,inventory,sortCollection};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.ForageCards=api;
+const api={crossDeckConflicts,manaStats,groups,onBoard,countedBoardCards,manaCostMarkup,archidektExport,boardCards,boardGroups,swapCategoryNames,art,tile,groupName,recommendation,pendingDecisions,search,compileSearch,inventory,sortCollection};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.ForageCards=api;
 })(typeof window!=='undefined'?window:globalThis);

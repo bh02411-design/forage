@@ -142,3 +142,28 @@ console.log('10 pending-decision checks passed.');
  assert.ok(!tile(card,[],'deck',null,{...issue,message:'<script>'}).includes('<script>'));
  console.log('Duplicate artwork, accessible labels and retained interactions passed.');
 }
+
+{
+ const {crossDeckConflicts,tile}=require('../static/card-view.js');
+ const collection=[{name:'Dour Port-Mage',qty:1},{name:'Forest',qty:5},{name:'Shared Frog',qty:2}];
+ const decks=[
+  {id:'clement',name:'Clement',cards:[{id:'a',name:'Dour Port-Mage',zone:'main',qty:1},{id:'b',name:'Shared Frog',zone:'main',qty:1},{name:'Forest',zone:'main',qty:1}]},
+  {id:'ygra',name:'Ygra',cards:[{id:'c',name:'Dour Port-Mage',zone:'main',qty:1},{name:'Shared Frog',zone:'main',qty:1}]},
+  {id:'considering',name:'Considering deck',cards:[{name:'Forest',zone:'maybe',qty:99}]}
+ ];
+ const conflicts=crossDeckConflicts(collection,decks);
+ assert.equal(conflicts.size,1);
+ const conflict=conflicts.get('dourportmage');
+ assert.equal(conflict.owned,1);assert.equal(conflict.assigned,2);
+ assert.deepEqual(conflict.deckNames,['Clement','Ygra']);
+ assert.ok(tile(decks[0].cards[0],collection,'deck',null,null,conflict).includes('cross-deck-conflict'));
+ assert.ok(tile(decks[1].cards[0],collection,'deck',null,null,conflict).includes('cross-deck-conflict'));
+ assert.ok(tile(decks[0].cards[1],collection,'deck',null,null,conflicts.get('sharedfrog')).includes('cross-deck-conflict')===false);
+ assert.ok(!tile({name:'Dour Port-Mage',qty:1,zone:'maybe'},collection,'deck',null,null,null).includes('cross-deck-conflict'));
+ assert.equal(crossDeckConflicts([],decks).size,0);
+ const single=[{...decks[0],cards:[{name:'Dour Port-Mage',zone:'main',qty:1}]}];
+ assert.equal(crossDeckConflicts(collection,single).size,0);
+ const overdraw=[{id:'solo',name:'Solo',cards:[{name:'Dour Port-Mage',zone:'main',qty:2}]}];
+ assert.equal(crossDeckConflicts(collection,overdraw).size,1);
+ console.log('Cross-deck physical inventory conflict checks passed.');
+}
