@@ -4,14 +4,15 @@
 Run through a Secure MCP Tunnel using stdio. Never expose Forage's local
 HTTP endpoint on a public interface. No OpenAI API key or model is required.
 """
+import http.client
 import json
 import os
 import re
 import sys
-import urllib.error
-import urllib.request
 
-MAX_BYTES = 64 * 1024 * 1024  # Local read cap; only small tool results cross the tunnel.
+MIB = 1024 * 1024
+DEFAULT_WORKSPACE_MIB = 64
+MAX_WORKSPACE_MIB = 128
 PROTOCOL_VERSION = "2025-06-18"
 
 
@@ -29,17 +30,39 @@ def integer(value, default, low, high):
 
 def read_workspace():
     port = integer(os.environ.get("FORAGE_PORT", "8765"), 8765, 1, 65535)
-    # Fixed loopback host/path; cannot be redirected by an MCP tool argument.
-    url = f"http://127.0.0.1:{port}/api/mcp-state"
-    request = urllib.request.Request(url, headers={"Accept": "application/json"})
-    with urllib.request.urlopen(request, timeout=8) as response:
-        if response.geturl() != url:
-            raise ValueError("Unexpected redirect from Forage")
-        body = response.read(MAX_BYTES + 1)
-        if len(body) > MAX_BYTES:
-            raise ValueError("Forage MCP snapshot exceeds 64 MB local read limit")
-    # The dedicated endpoint excludes CSRF tokens, settings, chats, and memories.
-    return json.loads(body)["state"]
+    limit_mib = integer(os.environ.get("FORAGE_MCP_MAX_MIB"), DEFAULT_WORKSPACE_MIB,
+                        DEFAULT_WORKSPACE_MIB, MAX_WORKSPACE_MIB)
+    max_bytes = limit_mib * MIB
+    size_error = f"Forage workspace exceeds bridge size limit ({limit_mib} MiB)"
+    # Direct loopback GET. HTTPConnection does not use proxies or follow redirects.
+    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=8)
+    for path in ("/api/mcp-state", "/api/state"):
+        try:
+            connection.request("GET", path, headers={"Accept": "application/json"})
+            with connection.getresponse() as response:
+                # Older Forage builds only have the browser endpoint.
+                if response.status == 404 and path == "/api/mcp-state":
+                    continue
+                if response.status != 200:
+                    raise ValueError("Forage workspace request failed")
+                if response.length is not None and response.length > max_bytes:
+                    raise ValueError(size_error)
+                body = response.read(max_bytes + 1)
+                if len(body) > max_bytes:
+                    raise ValueError(size_error)
+        finally:
+            connection.close()
+        break
+
+    try:
+        state = json.loads(body)["state"]
+    except (ValueError, KeyError, TypeError):
+        raise ValueError("Invalid Forage workspace response") from None
+    if not isinstance(state, dict):
+        raise ValueError("Invalid Forage workspace response")
+    # Only the fields needed by tools leave this function.
+    return {field: state[field] for field in ("active", "decks", "collection")
+            if field in state}
 
 
 def active_cards(deck):
