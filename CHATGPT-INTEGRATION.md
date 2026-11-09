@@ -44,6 +44,8 @@ Custom MCP creation and private tunnel entitlements vary by ChatGPT account/work
 
 - The MCP tool responses include the deck and collection information that you request in ChatGPT. They are not anonymous or made public, but they do leave your PC when you use the tool.
 - `mcp_bridge.py` does **not** return Forage settings, local CSRF token, chat history, saved memories, or deleted decks.
+- The bridge reads a dedicated local `/api/mcp-state` snapshot instead of the full `/api/state` browser payload. This excludes unrelated workspace data before loading it and avoids the previous 12 MB full-workspace failure. A 64 MB local snapshot safety limit remains; the tunnel receives only each filtered tool result.
+- Both the Forage server and `mcp_bridge.py` need updating. Restart Forage and the MCP tunnel after installing the updated version.
 - Access remains available while Forage and your MCP tunnel are running. If either stops, ChatGPT cannot read live data.
 - The bridge only checks whatever collection you imported; physical ownership and the legality metadata may be incomplete.
 - `propose_swap` checks one-for-one changes, not whole-deck consistency, replacement category or full Commander legality. It intentionally provides advisory results rather than applying changes.
