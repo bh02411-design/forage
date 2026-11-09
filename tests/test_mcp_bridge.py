@@ -63,7 +63,7 @@ class BridgeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "already on the mainboard"):
             bridge.propose_swap({"add": "Dour Port-Mage", "cut": "Island"}, state)
         bad = bridge.propose_swap({"add": "Dark Ritual", "cut": "Island"}, state)
-        self.assertIn("outside commander color identity", bad["warnings"])
+        self.assertIn("Addition is outside commander color identity", bad["warnings"])
         missing = bridge.propose_swap({"add": "Missing Card", "cut": "Island"}, state)
         self.assertIn("Card not found in imported collection", missing["warnings"])
 
