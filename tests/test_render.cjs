@@ -27,6 +27,27 @@ console.log('10 mixed prose/JSON formatting checks passed.');
 
 const vm=require('node:vm'),fs=require('node:fs');
 const app=fs.readFileSync(require.resolve('../static/app.js'),'utf8');
+
+// Execute the full browser entry point with IDs from the shipped HTML.
+{
+ const html=fs.readFileSync(require.resolve('../static/index.html'),'utf8');
+ const elements=new Map([...html.matchAll(/\bid="([^"]+)"/g)].map(([,id])=>[id,{
+  classList:{toggle(){},contains(){},remove(){},add(){}},setAttribute(){},addEventListener(){}
+ }]));
+ const requests=[];
+ const document={
+  querySelector(selector){return selector==='.shell'?elements.get('sidebar-toggle'):elements.get(selector.slice(1))??null},
+  querySelectorAll(){return []},
+  documentElement:{style:{setProperty(){}}}
+ };
+ const window={addEventListener(){}};
+ const fetch=url=>{requests.push(url);return new Promise(()=>{})};
+ vm.runInNewContext(app,{document,window,fetch},{filename:'static/app.js'});
+ assert.deepEqual(requests,['/api/state'],'browser startup requests the workspace');
+ assert.equal(typeof elements.get('lookup-open').onclick,'function');
+ assert.equal(elements.get('deck-drop').onclick,elements.get('lookup-open').onclick);
+}
+
 // Exercise retained pending-decision handlers without the local chatbot.
 (async()=>{
  const candidate={name:'Candidate',id:'c'},proposal={id:'p',add:'Candidate',cut:'Old Card',status:'pending'};
