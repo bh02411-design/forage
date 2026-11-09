@@ -25,6 +25,8 @@ assert.ok(!render('Intro\n```json\n{"reply":"<img src=x onerror=alert(1)>","prop
 assert.equal(cleanReply('Ordinary prose with {1}{B}.'),'Ordinary prose with {1}{B}.');
 console.log('10 mixed prose/JSON formatting checks passed.');
 
+const vm=require('node:vm'),fs=require('node:fs');
+const app=fs.readFileSync(require.resolve('../static/app.js'),'utf8');
 // Exercise retained pending-decision handlers without the local chatbot.
 (async()=>{
  const candidate={name:'Candidate',id:'c'},proposal={id:'p',add:'Candidate',cut:'Old Card',status:'pending'};
