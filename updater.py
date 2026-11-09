@@ -11,6 +11,7 @@ MAX_PACKAGE=20*1024*1024
 
 # Release notes stay in an existing updater file so older installers accept the package.
 CHANGELOG={
+ '0.2.43':['Reduce the ChatGPT MCP workspace payload with a local-only filtered read endpoint.','Avoid the bridge 12 MB full-workspace failure when using an updated bridge script; replacement of the separate bridge script is still required.','Keep browser access tokens, chat history, memories and settings out of the MCP snapshot.'],
  '0.2.42':['Highlight mainboard and commander cards red when assigned copies exceed the collection quantity across decks.','Show the owned versus assigned count and affected deck names while leaving Considering cards unchanged.','Reuse existing duplicate-warning styling and preserve normal deck and collection behavior.'],
  '0.2.41':['Speed up category drag/drop and bulk moves with compact save responses instead of reloading the whole workspace.','Update deck panels without rebuilding chat or collection; refresh collection availability when board or swap-staging membership changes.','Save rapid moves in order while preserving Undo, role tags, duplicate warnings and deck-switch behavior.'],
  '0.2.40':['Make the card tile own drag gestures instead of its nested artwork or selected text.','Hide the preview before pressing to drag, avoid mouse-focus preview changes, and clean up cancelled drags while preserving keyboard previews.'],
