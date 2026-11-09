@@ -28,7 +28,7 @@ console.log('Pinned swap category grouping and rendering checks passed');
  const calls=[],collection=[{id:'stock',name:'Stock Candidate',qty:1,zone:'main'}];
  const ctx={state:{active:'deck'},deck:()=>({cards}),ForageCards:Cards,findVisualCard:(id,source)=>(source==='collection'?collection:cards).find(c=>c.id===id),mutate:async(path,payload)=>calls.push({path,...payload}),toast:()=>{}};
  ctx.mutateDeckMove=ctx.mutate;
- vm.createContext(ctx);vm.runInContext(app.slice(app.indexOf('async function internalDrop('),app.indexOf('function renderChat(')),ctx);
+ vm.createContext(ctx);vm.runInContext(app.slice(app.indexOf('async function internalDrop('),app.indexOf('async function recommendationAction(')),ctx);
  await ctx.internalDrop({deck:'deck',id:'o',source:'deck'},'maybe','Swap Out');assert.equal(calls.at(-1).zone,'main');
  await ctx.internalDrop({deck:'deck',id:'m',source:'deck'},'main','Swap In');assert.equal(calls.at(-1).zone,'maybe');
  await ctx.internalDrop({deck:'deck',id:'stock',source:'collection'},'main','Swap In');assert.equal(calls.at(-1).zone,'maybe');
