@@ -85,6 +85,30 @@ class BridgeTests(unittest.TestCase):
         self.assertTrue(all(tool["annotations"]["readOnlyHint"] for tool in messages[1]["result"]["tools"]))
         self.assertNotIn("never-expose-this", output.getvalue())
 
+    def test_workspace_uses_private_compact_endpoint(self):
+        class FakeResponse:
+            def __init__(self, url):
+                self.url = url
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def geturl(self):
+                return self.url
+            def read(self, size):
+                return json.dumps({'state': fixture()}).encode('utf-8')
+
+        observed = []
+        def open_request(request, timeout=8):
+            observed.append(request.full_url)
+            return FakeResponse(request.full_url)
+
+        with patch.object(bridge.urllib.request, 'urlopen', side_effect=open_request):
+            result = bridge.read_workspace()
+        self.assertEqual(result['active'], 'frog')
+        self.assertEqual(observed, ['http://127.0.0.1:8765/api/mcp-state'])
+        self.assertGreater(bridge.MAX_BYTES, 12 * 1024 * 1024)
+
     def test_no_credential_or_arbitrary_url_arguments(self):
         for tool in bridge.TOOLS:
             self.assertNotIn("url", tool["inputSchema"]["properties"])
