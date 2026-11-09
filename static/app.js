@@ -1,8 +1,7 @@
 'use strict';
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
-let chatRenderedDeck=null;
 let duplicateWarnings={};
-let state,token,zone='main',view='workbench',pendingCard=null,pendingImage=null,busy=false,aiConnected=false;
+let state,token,zone='main',view='workbench',busy=false,aiConnected=false;
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const norm=s=>s.toLowerCase().split(' // ')[0].replace(/[^a-z0-9]/g,'');
 const uiRead=(k,fallback)=>{try{return localStorage.getItem('forage.'+k)||fallback}catch{return fallback}};
@@ -16,7 +15,7 @@ function setSidebarCollapsed(collapsed){
 }
 setSidebarCollapsed(uiRead('sidebarCollapsed','no')==='yes');
 $('#sidebar-toggle').onclick=()=>setSidebarCollapsed(!$('.shell').classList.contains('sidebar-collapsed'));
-let cardMode=uiRead('cardMode','stacks'),groupBy=uiRead('groupBy','category'),sortBy=uiRead('sortBy','name'),collectionMode=uiRead('collectionMode','grid'),collectionSort=uiRead('collectionSort','name'),collectionDirection=uiRead('collectionDirection','asc'),collectionLimit=60,deckExpanded=false;
+let cardMode=uiRead('cardMode','stacks'),groupBy=uiRead('groupBy','category'),sortBy=uiRead('sortBy','name'),collectionMode=uiRead('collectionMode','grid'),collectionSort=uiRead('collectionSort','name'),collectionDirection=uiRead('collectionDirection','asc'),collectionLimit=60;
 if(!['name','mana','color','type','rarity','owned','available'].includes(collectionSort))collectionSort='name';
 if(!['asc','desc'].includes(collectionDirection))collectionDirection='asc';
 if(!['stacks','grid','list'].includes(cardMode))cardMode='stacks';
@@ -82,7 +81,7 @@ function renderDeckSummary(){
 }
 function render(){
   renderDeckSummary();
-  renderManaStats();renderDeck();renderChat();renderProposals();renderMemory();renderCollection();renderHistory();bindWorkspacePlans();
+  renderManaStats();renderDeck();renderProposals();renderMemory();renderCollection();renderHistory();bindWorkspacePlans();
   $('#collection-count').textContent=state.collection.reduce((n,c)=>n+c.qty,0).toLocaleString();$('#memory-count').textContent=state.memories.length;
 }
 function renderManaStats(){
@@ -180,17 +179,6 @@ async function internalDrop(item,destination,category=null){
   await mutateDeckMove('card',payload);toast('Card moved. Role tags were preserved.');
  }
 }
-function renderChat(forceLatest=false){
- const body=$('#conversation-body'),deckId=state.active,previousTop=body.scrollTop;
- const followLatest=forceLatest||chatRenderedDeck!==deckId||body.scrollHeight-body.scrollTop-body.clientHeight<=60;
- $('#welcome').hidden=!!deck().chat.length;
- $('#messages').innerHTML=deck().chat.map(m=>`<article class="message ${m.role==='user'?'user':'assistant'}"><div class="message-heading"><div class="message-label">${m.role==='user'?'YOU':'FORAGE · LOCAL AI'}</div>${m.context_trace?`<button class="context-inspect" data-context-message="${m.id}">Context used · ${(m.context_trace.recent_messages||[]).length} messages</button>`:''}</div><div class="message-content">${ForageText.render(m.text)}</div>${m.role==='assistant'&&(m.recommendations||[]).length?`<section class="recommendation-tray" aria-label="Card options" data-rec-message="${esc(m.id)}"><h3>${m.recommendations.every(r=>r.kind==='match')?'Collection matches · not ranked':'Recommended additions'}</h3>${m.recommendations.map(r=>ForageCards.recommendation(r,state.collection,deck().cards,deck().proposals)).join('')}</section>`:''}${m.category_plan_id?workspacePlanMarkup((deck().category_plans||[]).find(p=>p.id===m.category_plan_id)):''}${(m.memory_suggestions||[]).map(s=>`<button class="memory-save" data-save-memory="${s.id}" data-message="${m.id}">Remember: ${esc(s.text)}</button>`).join('')}</article>`).join('');
- $$('[data-rec-action]').forEach(b=>b.onclick=()=>recommendationAction(b));
- $$('.recommendation-art img').forEach(img=>img.onerror=()=>{img.hidden=true;img.closest('.recommendation-art').classList.add('image-failed')});
- $$('[data-context-message]').forEach(b=>b.onclick=()=>showContextUsed(b.dataset.contextMessage));
- $$('[data-save-memory]').forEach(b=>b.onclick=async()=>{const m=deck().chat.find(m=>m.id===b.dataset.message).memory_suggestions.find(s=>s.id===b.dataset.saveMemory);if(!state.memories.some(x=>x.text===m.text)){await mutate('memory',{text:m.text,scope:m.scope});toast('Memory saved.')}else toast('Already remembered.');});
- requestAnimationFrame(()=>{if(state.active!==deckId||!body.clientHeight)return;body.scrollTop=followLatest?body.scrollHeight:previousTop;chatRenderedDeck=deckId;});
-}
 async function recommendationAction(button){
  const tray=button.closest('[data-rec-message]'),item=button.closest('[data-rec-id]');
  const m=deck().chat.find(m=>m.id===tray.dataset.recMessage),rec=m?.recommendations.find(r=>r.id===item.dataset.recId);
@@ -202,13 +190,9 @@ async function recommendationAction(button){
   if(shown)modal(shown.name,cardPreview(shown));return;
  }
  if(busy){toast('Wait for the current reply to finish.');return}
- if(action==='find'||action==='different'){
-  if($('#message').value.trim()||pendingCard||pendingImage){toast('Send or clear your current draft first.');return}
-  const request=`Find one concrete swap to add ${c.name} to my current mainboard. Keep ${c.name} as the addition. ${action==='different'&&p?`Suggest a different cut from ${p.cut}; I have not accepted that swap.`:'Compare my current cards and suggest the best cut.'} Explain the tradeoff and propose the swap.`;
-  closeModal();$('#message').value=request;await sendChat();return;
- }
  await run(async()=>{
   button.disabled=true;
+  if(['find','different'].includes(action)){toast('Use ChatGPT to discuss a different cut.');return}
   if(action==='accept'&&p){await mutate('proposal',{id:p.id,action:'accept'});toast('Swap accepted. You can undo it from the deck toolbar.');}
   else if(action==='pass'){await mutate('recommendation',{message:m.id,id:rec.id,action:'pass'});toast('Passed. Decision saved to the conversation.');}
   else if(['main','maybe'].includes(action)){
@@ -260,7 +244,7 @@ function renderCollection(){
  $('#collection-more').hidden=matches.length<=collectionLimit;
 }
 function renderHistory(){const proposals=deck().proposals.filter(p=>p.status!=='pending');$('#history-list').innerHTML=[...deck().history].reverse().map(h=>`<div class="history-item">${esc(h.summary)}<small>Deck change · undo available in reverse order</small></div>`).join('')+proposals.map(p=>`<div class="history-item">${p.status==='accepted'?'✓ ACCEPTED':'↷ SKIPPED'} · ${esc(p.cut)} → ${esc(p.add)}<small>${esc(p.feedback||p.reason)}</small></div>`).join('')||'<div class="empty">Your decisions will appear here.</div>'}
-function changeView(next){hideCardHover();view=next;$$('.view').forEach(el=>el.hidden=el.id!==next);$$('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===next));if(next==='workbench')renderChat(true)}
+function changeView(next){hideCardHover();view=next;$$('.view').forEach(el=>el.hidden=el.id!==next);$$('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===next));}
 async function run(fn){try{await fn()}catch(e){toast(e.message);$$('button:disabled').forEach(b=>b.disabled=false)}}
 function memoryDialog(m={}){modal(m.id?'Edit memory':'Add a memory',`<label class="field">Applies to<select id="memory-scope"><option value="deck" ${m.scope!=='global'?'selected':''}>This deck</option><option value="global" ${m.scope==='global'?'selected':''}>All decks</option></select></label><label class="field">What should Forage remember?<textarea id="memory-text" rows="4">${esc(m.text||'')}</textarea></label><button id="save-memory" class="button primary">Save memory</button>`);$('#save-memory').onclick=()=>run(async()=>{await mutate('memory',{id:m.id,text:$('#memory-text').value,scope:$('#memory-scope').value});closeModal();toast('Memory saved.');});}
 function importDialog(target='deck'){modal(target==='collection'?'Import your collection':'Import a deck',`<p class="modal-note">Paste an Archidekt text export, or choose a CSV/TXT file. Deck imports replace the active list and can be undone. Collection imports replace owned quantities; deck assignments come from imported decks.</p><label class="field">Import into<select id="import-target"><option value="deck" ${target==='deck'?'selected':''}>Active deck</option><option value="collection" ${target==='collection'?'selected':''}>Collection</option></select></label><label class="field">Choose export file<input id="import-file" type="file" accept=".csv,.txt,.tsv"></label><label class="field">Or paste a list<textarea id="import-text" rows="9" placeholder="1 Ygra, Eater of All [Commander]&#10;1 Arcbound Ravager [Sacrifice]&#10;11 Forest [Land]"></textarea></label><p class="modal-note">CSV: Name / Card Name and Quantity / Qty columns. Use category Commander, Mainboard, or Maybeboard to identify boards. Sideboard imports go to Considering.</p><button id="confirm-import" class="button primary">Import list</button>`);$('#import-file').onchange=async e=>{if(e.target.files[0])$('#import-text').value=await e.target.files[0].text()};$('#confirm-import').onclick=()=>run(async()=>{const r=await mutate('import',{text:$('#import-text').value,target:$('#import-target').value});closeModal();toast(r.warnings?.length?'Imported with warnings: '+r.warnings.join(' '):'Import complete.');});}
@@ -270,18 +254,23 @@ function editCard(id){const c=deck().cards.find(c=>c.id===id);modal(c.name,cardP
  $('#remove-card').onclick=()=>run(async()=>{await mutate('card',{id,action:'remove'});closeModal();toast('Card removed.');});
  $('#resolve-card').onclick=()=>run(async()=>{const r=await api('lookup?name='+encodeURIComponent(c.name));await mutate('card',{id,action:'enrich',card:r.card});editCard(id)});
 }
-function showCandidate(c,target='maybe'){modal('Confirm recognized card',cardPreview(c,`<p class="modal-note">Check the card identity before adding it. This does not mark a physical copy as owned.</p><div class="modal-actions"><button id="candidate-chat" class="button primary">Discuss this card</button><button id="candidate-maybe" class="button secondary">Add to Considering</button><button id="candidate-main" class="button secondary">Add to Mainboard</button></div>`));$('#candidate-chat').onclick=()=>{pendingCard=c;renderAttachment();closeModal();$('#message').focus()};for(const [id,zone] of [['candidate-maybe','maybe'],['candidate-main','main']])$('#'+id).onclick=()=>run(async()=>{await mutate('card',{action:'add',card:c,zone});closeModal();toast('Added to '+(zone==='main'?'Mainboard':'Considering')+'.');});}
-function lookupDialog(){modal('Find a card',`<form id="lookup-form"><label class="field">Card name<input id="lookup-name" placeholder="For example: Experimental Confectioner" autofocus></label><button class="button primary">Look up card</button></form><p class="modal-note">Looks up card text and an image on Scryfall. You can also paste a Scryfall or EDHREC card link.</p><div id="lookup-error" class="error"></div>`);$('#lookup-form').onsubmit=async e=>{e.preventDefault();$('#lookup-error').textContent='Looking up…';try{const val=$('#lookup-name').value;const r=val.includes('://')?await api('drop',{text:val}):await api('lookup?name='+encodeURIComponent(val));showCandidate(r.card)}catch(e){$('#lookup-error').textContent=e.message}};$('#lookup-name').focus();}
-function renderAttachment(){$('#attachment').hidden=!pendingCard&&!pendingImage;$('#attachment').innerHTML=(pendingCard?esc(pendingCard.name):'Image attached · requires a vision-capable model')+'<button id="clear-attachment" class="quiet">×</button>';$('#clear-attachment').onclick=()=>{pendingCard=null;pendingImage=null;renderAttachment()}}
-async function imageFile(file){if(!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error('Use PNG, JPEG or WebP.');if(file.size>6*1024*1024)throw Error('Use an image smaller than 6 MB.');pendingImage=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(file)});pendingCard=null;renderAttachment();modal('Identify this image',`<p class="modal-note">A vision-capable local model can read the card name. You can also enter the name manually. Nothing is added until you confirm the result.</p><div class="modal-actions"><button id="vision-identify" class="button primary">Identify with local AI</button><button id="vision-manual" class="button secondary">Enter card name</button><button id="vision-chat" class="quiet">Discuss image directly</button></div><div id="vision-error" class="error"></div>`);$('#vision-identify').onclick=async()=>{$('#vision-error').textContent='Reading image locally…';try{const r=await api('vision',{image:pendingImage});pendingImage=null;renderAttachment();showCandidate(r.card)}catch(e){$('#vision-error').textContent=e.message}};$('#vision-manual').onclick=()=>{pendingImage=null;renderAttachment();lookupDialog()};$('#vision-chat').onclick=()=>{closeModal();$('#message').focus()};}
-async function handleDrop(e){e.preventDefault();e.stopPropagation();e.currentTarget.classList.remove('dragover');const dt=e.dataTransfer;try{const own=dt.getData('application/x-forage-card');if(own){const item=JSON.parse(own);const c=findVisualCard(item.id,item.source);if(!c)throw Error('Card no longer available.');if(e.currentTarget.id==='chat-form'){pendingCard=c;pendingImage=null;renderAttachment();$('#message').focus()}else await internalDrop(item,zone);return}const html=dt.getData('text/html'),text=dt.getData('text/uri-list')||dt.getData('text/plain');if(html||text){try{const r=await api('drop',{html,text});showCandidate(r.card);return}catch(err){if(!dt.files.length)throw err}}if(dt.files.length){const file=dt.files[0];if(/\.(csv|txt|tsv)$/i.test(file.name)){importDialog();$('#import-text').value=await file.text()}else await imageFile(file)}else toast('Drop a card image, card link, or deck export.')}catch(e){toast(e.message)}}
+function showCandidate(c,target='maybe'){
+ modal('Confirm recognized card',cardPreview(c,`<p class="modal-note">Check the card identity before adding. Ownership is not changed.</p><div class="modal-actions"><button id="candidate-maybe" class="button secondary">Add to Considering</button><button id="candidate-main" class="button secondary">Add to Mainboard</button></div>`));
+ for(const [id,board] of [['candidate-maybe','maybe'],['candidate-main','main']])$('#'+id).onclick=()=>run(async()=>{await mutate('card',{action:'add',card:c,zone:board});closeModal();toast('Added to '+(board==='main'?'Mainboard':'Considering')+'.')});
+}
+async function imageFile(file){
+ if(!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error('Use PNG, JPEG or WebP.');
+ if(file.size>6*1024*1024)throw Error('Use an image smaller than 6 MB.');
+ const data=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(file)});
+ modal('Identify card image',`<p class="modal-note">Identify with your configured local vision model or enter the card name manually.</p><div class="modal-actions"><button id="vision-identify" class="button primary">Identify with local AI</button><button id="vision-manual" class="button secondary">Enter card name</button></div><div id="vision-error" class="error"></div>`);
+ $('#vision-identify').onclick=async()=>{ $('#vision-error').textContent='Reading image locally…';try{const r=await api('vision',{image:data});showCandidate(r.card)}catch(e){$('#vision-error').textContent=e.message}};
+ $('#vision-manual').onclick=lookupDialog;
+}
+async function handleDrop(e){e.preventDefault();e.stopPropagation();e.currentTarget.classList.remove('dragover');const dt=e.dataTransfer;try{const own=dt.getData('application/x-forage-card');if(own){const item=JSON.parse(own);const c=findVisualCard(item.id,item.source);if(!c)throw Error('Card no longer available.');await internalDrop(item,zone);return}const html=dt.getData('text/html'),text=dt.getData('text/uri-list')||dt.getData('text/plain');if(html||text){try{const r=await api('drop',{html,text});showCandidate(r.card);return}catch(err){if(!dt.files.length)throw err}}if(dt.files.length){const file=dt.files[0];if(/\.(csv|txt|tsv)$/i.test(file.name)){importDialog();$('#import-text').value=await file.text()}else await imageFile(file)}else toast('Drop a card image, card link, or deck export.')}catch(e){toast(e.message)}}
 function bindDrop(el){el.addEventListener('dragover',e=>{e.preventDefault();el.classList.add('dragover')});el.addEventListener('dragleave',()=>el.classList.remove('dragover'));el.addEventListener('drop',handleDrop)}
-async function sendChat(e){e?.preventDefault();if(busy)return;let message=$('#message').value.trim();if(!message&&!pendingCard&&!pendingImage)return;if(pendingCard)message+=(message?'\n\n':'')+'Card under discussion (confirmed lookup): '+JSON.stringify({name:pendingCard.name,mv:pendingCard.mv,oracle_text:pendingCard.oracle_text});if(!message)message='Please analyze this card image for the current deck. State any uncertainty about its identity.';
- busy=true;$('#send').disabled=true;$('#chat-error').textContent='Thinking locally… This can take a while for a large model.';
- try{await api('chat',{deck:state.active,message,image:pendingImage});$('#message').value='';pendingCard=null;pendingImage=null;renderAttachment();await refresh();$('#chat-error').textContent='';aiConnected=true;updateAIStatus()}catch(e){$('#chat-error').textContent=e.message}finally{busy=false;$('#send').disabled=false}}
-function updateAIStatus(){$('#ai-status').textContent=aiConnected?'● Local AI connected':'○ Connect local AI';$('#ai-status').classList.toggle('connected',aiConnected)}
+function updateAIStatus(){}
 async function probeModels(){const r=await api('models');aiConnected=!!r.models.length;updateAIStatus();return r.models}
-function settingsDialog(){const s=state.settings;modal('Local AI & settings',`<p class="modal-note">Run LM Studio on this PC, load a model, and start its local server. Forage sends your active deck, applicable memories, recent conversation, excerpts of earlier requests, and relevant local collection search results to that loopback server. No cloud AI endpoint is accepted.</p><label class="field">Local API address<input id="lm-url" value="${esc(s.lm_url)}"></label><label class="field">Model identifier<input id="lm-model" value="${esc(s.model)}" placeholder="Choose a model after checking connection" list="model-options"><datalist id="model-options"></datalist></label><button id="check-ai" class="button secondary">Check connection & list models</button><div id="settings-status" class="modal-note"></div><label class="field"><input id="collection-only" type="checkbox" ${s.collection_only?'checked':''}>Require an available owned copy when accepting a swap</label><p class="modal-note">Turn this off only for deliberate wishlist changes. Collection assignments only cover decks you have imported. AI-generated advice and role matches still need your review.</p><p><button id="updates-open" class="button secondary">Application updates</button> <button id="desktop-open" class="button secondary">Windows tray & startup</button></p><div class="modal-actions"><button id="save-settings" class="button primary">Save settings</button><label class="button secondary">Restore backup<input id="restore-file" type="file" accept=".json" hidden></label></div><p class="modal-note">Backups include your decks, chats, and memory. Before restoring, Forage saves an additional copy of the current workspace in its data folder.</p>`);
+function settingsDialog(){const s=state.settings;modal('Local AI & settings',`<p class="modal-note">Local AI is optional for identifying dropped card images with a vision-capable model. Deck building, collection management, and ChatGPT access do not require LM Studio. No cloud AI endpoint is accepted.</p><label class="field">Local API address<input id="lm-url" value="${esc(s.lm_url)}"></label><label class="field">Model identifier<input id="lm-model" value="${esc(s.model)}" placeholder="Choose a model after checking connection" list="model-options"><datalist id="model-options"></datalist></label><button id="check-ai" class="button secondary">Check connection & list models</button><div id="settings-status" class="modal-note"></div><label class="field"><input id="collection-only" type="checkbox" ${s.collection_only?'checked':''}>Require an available owned copy when accepting a swap</label><p class="modal-note">Turn this off only for deliberate wishlist changes. Collection assignments only cover decks you have imported. Imported collection ownership may be incomplete.</p><p><button id="updates-open" class="button secondary">Application updates</button> <button id="desktop-open" class="button secondary">Windows tray & startup</button></p><div class="modal-actions"><button id="save-settings" class="button primary">Save settings</button><label class="button secondary">Restore backup<input id="restore-file" type="file" accept=".json" hidden></label></div><p class="modal-note">Backups include your decks, chats, and memory. Before restoring, Forage saves an additional copy of the current workspace in its data folder.</p>`);
  $('#updates-open').onclick=()=>run(updatesDialog);
  $('#desktop-open').onclick=()=>run(desktopDialog);
  $('#check-ai').onclick=async()=>{try{await mutate('settings',{lm_url:$('#lm-url').value,model:$('#lm-model').value,collection_only:$('#collection-only').checked});const models=await probeModels();$('#model-options').innerHTML=models.map(m=>`<option value="${esc(m.id)}"></option>`).join('');if(models.length&&!$('#lm-model').value)$('#lm-model').value=models[0].id;$('#settings-status').textContent=models.length?models.length+' model(s) found. Select the intended chat model and save.':'Server reached; no models found. Load a model in LM Studio.';}catch(e){$('#settings-status').textContent=e.message;aiConnected=false;updateAIStatus()}};
@@ -322,7 +311,7 @@ $('#deck-syntax-key').onclick=()=>syntaxKey('deck');$('#collection-syntax-key').
 $('#deck-search').oninput=renderDeck;$('#collection-search').oninput=()=>{collectionLimit=60;renderCollection()};
 $$('[data-zone]').forEach(b=>b.onclick=()=>{zone=b.dataset.zone;$$('[data-zone]').forEach(x=>x.classList.toggle('active',x===b));renderDeck()});
 $('#pending-decisions').onclick=showPendingDecisions;
-$('#settings-open').onclick=settingsDialog;$('#setup-link').onclick=settingsDialog;$('#ai-status').onclick=settingsDialog;
+$('#settings-open').onclick=settingsDialog;
 $('#import-open').onclick=()=>importDialog(view==='collection'?'collection':'deck');$('#collection-import').onclick=()=>importDialog('collection');$('#lookup-open').onclick=lookupDialog;$('#deck-drop').onclick=lookupDialog;
 $('#add-memory').onclick=()=>memoryDialog();$('#enrich').onclick=()=>run(enrichDeck);
 for(const id of ['undo','history-undo'])$('#'+id).onclick=()=>run(async()=>{await mutate('undo',{});toast('Last deck change undone.');});
@@ -333,13 +322,9 @@ function exportDeckDialog(){
  $('#export-deck-download').onclick=()=>download('forage-deck.txt',exported.text);
 }
 $('#export').onclick=()=>run(exportDeckDialog);
-$('#chat-form').onsubmit=sendChat;$('#message').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat()}};
-$$('[data-prompt]').forEach(b=>b.onclick=()=>{$('#message').value=b.dataset.prompt;$('#message').focus()});$('#sample').onclick=()=>run(sample);
-bindDrop($('#deck-drop'));bindDrop($('#chat-form'));
-$('#image-upload').onchange=e=>run(async()=>{if(e.target.files[0])await imageFile(e.target.files[0]);e.target.value=''});
-$('#message').addEventListener('paste',e=>{const item=[...e.clipboardData.items].find(i=>i.type.startsWith('image/'));if(item){e.preventDefault();run(()=>imageFile(item.getAsFile()))}});
+$('#sample').onclick=()=>run(sample);bindDrop($('#deck-drop'));
 window.addEventListener('dragover',e=>e.preventDefault());window.addEventListener('drop',e=>e.preventDefault());
-refresh().then(()=>{probeModels().catch(()=>updateAIStatus())}).catch(e=>toast(e.message));
+refresh().catch(e=>toast(e.message));
 
 $('#collection-enrich').onclick=()=>run(async()=>{
  const button=$('#collection-enrich');button.disabled=true;
@@ -356,14 +341,6 @@ $('#sort-cards').onchange=e=>{sortBy=e.target.value;uiSave('sortBy',sortBy);rend
 const savedSize=Math.max(145,Math.min(255,Number(uiRead('cardSize','175'))||175));
 $('#card-size').value=savedSize;document.documentElement.style.setProperty('--card-width',savedSize+'px');
 $('#card-size').oninput=e=>{document.documentElement.style.setProperty('--card-width',e.target.value+'px');uiSave('cardSize',e.target.value)};
-function setChatCollapsed(collapsed){
- deckExpanded=collapsed;$('.workspace').classList.toggle('deck-expanded',collapsed);
- const button=$('#focus-deck');button.textContent=collapsed?'Show chat ↙':'Hide chat ↗';
- button.setAttribute('aria-pressed',String(collapsed));button.setAttribute('aria-expanded',String(!collapsed));
- $('#collapse-chat').setAttribute('aria-expanded',String(!collapsed));
-}
-$('#focus-deck').onclick=()=>{setChatCollapsed(!deckExpanded);hideCardHover();if(!deckExpanded)renderChat(true)};
-$('#collapse-chat').onclick=()=>{$('#focus-deck').focus();$('#focus-deck').click()};
 $$('[data-collection-mode]').forEach(b=>b.onclick=()=>{collectionMode=b.dataset.collectionMode;uiSave('collectionMode',collectionMode);renderCollection()});
 $('#collection-sort').onchange=e=>{collectionSort=e.target.value;uiSave('collectionSort',collectionSort);collectionLimit=60;renderCollection()};
 $('#collection-direction').onchange=e=>{collectionDirection=e.target.value;uiSave('collectionDirection',collectionDirection);collectionLimit=60;renderCollection()};
@@ -400,8 +377,7 @@ function syncViewSettings(){
  const v=deck().view_settings||{};
  cardMode=v.card_mode||uiRead('cardMode','stacks');groupBy=v.group_by||uiRead('groupBy','category');sortBy=v.sort_by||uiRead('sortBy','name');
  const size=v.card_size||Math.max(145,Math.min(255,Number(uiRead('cardSize','175'))||175));$('#card-size').value=size;document.documentElement.style.setProperty('--card-width',size+'px');
- deckExpanded=typeof v.deck_expanded==='boolean'?v.deck_expanded:false;
- setChatCollapsed(deckExpanded);
+
 }
 function persistView(fields){run(()=>mutate('view',{settings:fields}))}
 $('#auto-categorize').onclick=()=>run(async()=>{
@@ -419,13 +395,6 @@ $$('[data-card-mode]').forEach(b=>b.addEventListener('click',()=>persistView({ca
 $('#group-cards').addEventListener('change',e=>persistView({group_by:e.target.value}));
 $('#sort-cards').addEventListener('change',e=>persistView({sort_by:e.target.value}));
 $('#card-size').addEventListener('change',e=>persistView({card_size:Number(e.target.value)}));
-$('#focus-deck').addEventListener('click',()=>persistView({deck_expanded:deckExpanded}));
-
-function showContextUsed(id){
- const msg=deck().chat.find(m=>m.id===id),trace=msg?.context_trace;if(!trace)return;
- const history=trace.recent_messages||[],brief=trace.conversation_context||{};
- modal('Conversation context used',`<p class="modal-note">${esc(trace.note||'Context sent to the local model for this reply.')}</p>${trace.model_response_diagnostic?`<details><summary>Local model response · diagnostic only</summary><p class="modal-note">${esc(trace.model_response_diagnostic.note)}</p><pre class="model-diagnostic">${esc(trace.model_response_diagnostic.text)}</pre></details>`:''}${trace.recommendation_checks?`<h3 class="category-subtitle">${trace.request_task?.task==='cuts'?'Cut':'Addition'} checks: ${esc(trace.recommendation_checks.status)}</h3><p class="modal-note">${esc(trace.recommendation_checks.scope||'The answer failed checks and was withheld.')}</p>${(trace.recommendation_checks.issues||[]).map(x=>'<p>'+esc(x)+'</p>').join('')}${(trace.recommendation_checks.cards||[]).map(c=>`<article class="context-excerpt"><strong>${esc(c.name)}</strong><p>Cost ${esc(c.mana_cost??'unknown')} · MV ${esc(c.mv??'unknown')} · Power ${esc(c.power??'n/a or unknown')}</p><p>${esc(c.available)} available · Color check: ${esc(c.color_check)}</p><p>${esc(c.oracle_text||'Rules unresolved')}</p><p class="muted small">${esc(c.meta_source||'Source unknown')}</p></article>`).join('')}`:''}<h3 class="category-subtitle">Recent messages actually sent</h3>${history.map(m=>`<article class="context-excerpt"><div class="eyebrow green">${m.role==='user'?'YOU':'EARLIER ASSISTANT'}</div>${ForageText.render(m.text)}</article>`).join('')||'<p class="muted small">No prior chat messages were included for this reply.</p>'}<h3 class="category-subtitle">Earlier user requests retained</h3>${(brief.earlier_user_requests||[]).map(m=>'<article class="context-excerpt">'+ForageText.render(m.text)+'</article>').join('')||'<p class="muted small">No earlier substantial requests were available.</p>'}${(brief.related_older_excerpts||[]).length?'<h3 class="category-subtitle">Related older excerpts</h3>':''}${(brief.related_older_excerpts||[]).map(m=>'<article class="context-excerpt"><div class="eyebrow green">'+esc(m.role)+'</div>'+ForageText.render(m.excerpt)+'</article>').join('')}${(trace.collection_searches||[]).length?'<h3 class="category-subtitle">Collection searches executed</h3>':''}${(trace.collection_searches||[]).map(s=>'<article class="context-excerpt"><strong>'+esc(s.query)+'</strong><p>'+esc(s.matches)+' matching cards</p><p>'+esc((s.cards||[]).join(', '))+'</p></article>').join('')}<p class="modal-note">Deck data and saved preferences are sent separately. Earlier assistant messages are conversation history, not verified rules or proof of accepted edits.</p>`);
-}
 
 
 async function updatesDialog(){

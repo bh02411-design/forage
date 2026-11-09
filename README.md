@@ -10,7 +10,11 @@ For a source installation, extract the application into a writable folder, insta
 
 Import a deck and collection separately. Use **Resolve card data** to retrieve Oracle text, costs, colors, power and images from Scryfall. Collection lookups run in resumable batches; unknown facts remain unknown. Import other decks to account for assigned physical copies. Membership in a deck is not proof of ownership.
 
-## Local AI
+## Local AI and ChatGPT integration
+
+The built-in chat panel has been removed to keep Forage focused on deck and collection management. Prior local conversations remain in existing workspace data and backups for recovery; removing the interface does not delete them. ChatGPT deck-reading uses the separate read-only MCP bridge described in [CHATGPT-INTEGRATION.md](CHATGPT-INTEGRATION.md). The ChatGPT bridge is independent of LM Studio.
+
+LM Studio remains optional for local card-image recognition. The following notes describe the legacy local chat engine retained for compatibility.
 
 Load a chat model in LM Studio and start its local server. Open **Local AI & settings**, use `http://127.0.0.1:1234/v1`, list the models, choose one and save. Only loopback HTTP AI endpoints are accepted. The application does not connect to paid cloud inference.
 
