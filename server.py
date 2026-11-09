@@ -586,6 +586,22 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/api/updates/history':
             try:return self.send_json(updater.release_history(ROOT,DATA))
             except Exception as exc:return self.send_json({'error':str(exc)},400)
+        if path=='/api/mcp-state':
+            # Local-only, read-only snapshot for the ChatGPT bridge. Never return
+            # the browser mutation token, chat, history, memories or settings.
+            with LOCK: state=read_state()
+            fields=('name','qty','zone','group','mv','mana_cost','type_line',
+                    'oracle_text','color_identity','roles','land','mdfc',
+                    'protected','legalities','meta_source')
+            def public_card(card):
+                return {key:card[key] for key in fields if key in card}
+            return self.send_json({'state':{
+                'active':state.get('active'),
+                'decks':[{'id':d.get('id'),'name':d.get('name'),
+                          'swap_categories':d.get('swap_categories'),
+                          'cards':[public_card(c) for c in d.get('cards',[])]}
+                         for d in state.get('decks',[])],
+                'collection':[public_card(c) for c in state.get('collection',[])]}})
         if path=='/api/state':
             with LOCK: state=read_state()
             duplicates={deck['id']:duplicate_violations(deck) for deck in state['decks']}
