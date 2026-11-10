@@ -67,6 +67,38 @@ class SavedVersionsTests(unittest.TestCase):
         self.assertNotIn('saved_versions',migrated['decks'][0])
         self.assertEqual(server.list_deck_versions(self.deck['id'])[0]['id'],'legacy-id')
 
+    def test_hundred_versions_do_not_expand_workspace_payload(self):
+        baseline=len(json.dumps(server.read_state()))
+        for number in range(100):
+            server.save_deck_version(self.deck,'Version '+str(number))
+        self.assertEqual(len(server.list_deck_versions(self.deck['id'])),100)
+        self.assertEqual(len(json.dumps(server.read_state())),baseline)
+        with self.assertRaises(ValueError):
+            server.save_deck_version(self.deck,'Version 101')
+
+    def test_http_state_and_snapshot_listing(self):
+        import threading
+        import urllib.request
+        from http.server import ThreadingHTTPServer
+        server.save_deck_version(self.deck,'Original')
+        app=ThreadingHTTPServer(('127.0.0.1',0),server.Handler)
+        thread=threading.Thread(target=app.serve_forever,daemon=True)
+        thread.start()
+        self.addCleanup(thread.join,2)
+        self.addCleanup(app.server_close)
+        self.addCleanup(app.shutdown)
+        base='http://127.0.0.1:'+str(app.server_address[1])
+        with urllib.request.urlopen(base+'/api/state',timeout=5) as response:
+            state=json.load(response)['state']
+        self.assertNotIn('saved_versions',state['decks'][0])
+        with urllib.request.urlopen(base+'/api/deck-versions?deck='+self.deck['id'],timeout=5) as response:
+            versions=json.load(response)['versions']
+        self.assertEqual(versions[0]['name'],'Original')
+        self.assertNotIn('snapshot',versions[0])
+        with urllib.request.urlopen(base+'/api/backup',timeout=5) as response:
+            backup=json.load(response)
+        self.assertEqual(backup['decks'][0]['saved_versions'][0]['name'],'Original')
+
     def test_deleted_deck_versions_are_in_backup(self):
         server.save_deck_version(self.deck,'Equipment test')
         server.delete_deck(self.state,self.deck['id'],self.deck['name'])
