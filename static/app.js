@@ -304,26 +304,29 @@ $('#basic-land-optimizer').onclick=()=>run(()=>basicLandDialog());
 async function sample(){const r=await api('sample',{deck:state.active});modal('Land-drop sample',`<p class="modal-note">${esc(r.assumptions)}</p><p class="notice">${r.opening_two_to_four}% of opening hands had 2–4 potential lands.</p><table><thead><tr><th>Through turn</th><th>Hit every land drop</th></tr></thead><tbody>${Object.entries(r.land_drop).map(([t,p])=>`<tr><td>${t}</td><td>${p}%</td></tr>`).join('')}</tbody></table><p class="modal-note">${r.runs.toLocaleString()} seeded samples · seed ${r.seed}. This does not estimate whether you can cast Ygra on time: colored sources, tapped lands, ramp, and draw engines are excluded.</p>`)}
 $('#modal-close').onclick=closeModal;$('#modal').addEventListener('click',e=>{if(e.target===$('#modal')){const r=$('#modal').getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)closeModal()}});
 $$('[data-view]').forEach(b=>b.onclick=()=>changeView(b.dataset.view));
-function deckVersionsDialog(){
- const versions=[...(deck().saved_versions||[])].reverse();
- modal('Saved versions · '+deck().name,`<p class="modal-note">Keep named copies of this deck list without creating extra decks. Snapshots include all boards, categories and deck display settings. Restoring changes only this deck; collection ownership and other decks are untouched. Undo reverses a restore.</p><label class="field">Version name<input id="version-name" maxlength="120" placeholder="Equipment build · November 9"></label><div class="modal-actions"><button id="save-deck-version" class="button primary">Save current deck</button></div><h3>Saved versions · ${versions.length}</h3><div class="deck-manager-list">${versions.map(v=>`<div class="deck-manager-row"><div><strong>${esc(v.name)}</strong><small class="muted">${esc(new Date(v.created_at).toLocaleString())} · ${v.snapshot.cards.reduce((n,c)=>n+c.qty,0)} cards</small></div><div class="modal-actions"><button class="button secondary" data-restore-version="${esc(v.id)}">Restore</button><button class="button secondary" data-delete-version="${esc(v.id)}">Delete</button></div></div>`).join('')||'<p class="muted">No versions saved yet.</p>'}</div>`);
+async function deckVersionsDialog(){
+ const selected=deck(), deckId=selected.id;
+ const result=await api('deck-versions?deck='+encodeURIComponent(deckId));
+ if(state.active!==deckId)return;
+ const versions=result.versions||[];
+ modal('Saved versions · '+selected.name,`<p class="modal-note">Keep named copies of this deck list without creating extra decks. Snapshots include all boards, categories and deck display settings. Restoring changes only this deck; collection ownership and other decks are untouched. Undo reverses a restore.</p><label class="field">Version name<input id="version-name" maxlength="120" placeholder="Equipment build · November 9"></label><div class="modal-actions"><button id="save-deck-version" class="button primary">Save current deck</button></div><h3>Saved versions · ${versions.length}</h3><div class="deck-manager-list">${versions.map(v=>`<div class="deck-manager-row"><div><strong>${esc(v.name)}</strong><small class="muted">${esc(new Date(v.created_at).toLocaleString())} · ${v.card_count} cards</small></div><div class="modal-actions"><button class="button secondary" data-restore-version="${esc(v.id)}">Restore</button><button class="button secondary" data-delete-version="${esc(v.id)}">Delete</button></div></div>`).join('')||'<p class="muted">No versions saved yet.</p>'}</div>`);
  $('#save-deck-version').onclick=()=>run(async()=>{
   const name=$('#version-name').value.trim();if(!name){toast('Enter a version name.');return}
-  await mutate('save-deck-version',{name});deckVersionsDialog();toast('Saved version: '+name);
+  await mutate('save-deck-version',{name});await deckVersionsDialog();toast('Saved version: '+name);
  });
- $('[data-restore-version]').forEach(b=>b.onclick=()=>run(async()=>{
-  const version=(deck().saved_versions||[]).find(v=>v.id===b.dataset.restoreVersion);
+ $$('[data-restore-version]').forEach(b=>b.onclick=()=>run(async()=>{
+  const version=versions.find(v=>v.id===b.dataset.restoreVersion);
   if(!version)return;
   if(!confirm('Restore "'+version.name+'"? This replaces the active deck list, but you can Undo the restore.'))return;
-  await mutate('restore-deck-version',{version_id:version.id});deckVersionsDialog();toast('Restored '+version.name+'. Undo is available.');
+  await mutate('restore-deck-version',{version_id:version.id});await deckVersionsDialog();toast('Restored '+version.name+'. Undo is available.');
  }));
- $('[data-delete-version]').forEach(b=>b.onclick=()=>run(async()=>{
-  const version=(deck().saved_versions||[]).find(v=>v.id===b.dataset.deleteVersion);
+ $$('[data-delete-version]').forEach(b=>b.onclick=()=>run(async()=>{
+  const version=versions.find(v=>v.id===b.dataset.deleteVersion);
   if(!version||!confirm('Delete saved version "'+version.name+'"? This cannot be undone.'))return;
-  await mutate('delete-deck-version',{version_id:version.id});deckVersionsDialog();toast('Saved version deleted.');
+  await mutate('delete-deck-version',{version_id:version.id});await deckVersionsDialog();toast('Saved version deleted.');
  }));
 }
-$('#deck-versions').onclick=deckVersionsDialog;
+$('#deck-versions').onclick=()=>run(deckVersionsDialog);
 function manageDecksDialog(){
  const deleted=state.deleted_decks||[];
  modal('Manage decks',`<p class="modal-note">Delete a deck from your workspace, or restore a previously deleted deck.</p><div class="deck-manager-list">${state.decks.map(d=>`<div class="deck-manager-row"><div><strong>${esc(d.name)}</strong>${d.id===state.active?'<small class="muted">Active deck</small>':''}</div><button class="button secondary" data-delete-deck="${esc(d.id)}">Delete…</button></div>`).join('')}</div><h3>Deleted decks · ${deleted.length}</h3><p class="modal-note">Cards, chat, and deck history are kept here until you restore the deck. Deleted decks do not reserve cards from your collection. Restoring one restores its card assignments.</p><div class="deck-manager-list">${deleted.map(e=>`<div class="deck-manager-row"><div><strong>${esc(e.deck.name)}</strong><small class="muted">Deleted ${esc(new Date(e.deleted_at).toLocaleDateString())}</small></div><button class="button secondary" data-restore-deck="${esc(e.deck.id)}">Restore</button></div>`).join('')||'<p class="muted">No deleted decks.</p>'}</div>`);
@@ -349,7 +352,7 @@ $('#settings-open').onclick=settingsDialog;
 $('#import-open').onclick=()=>importDialog(view==='collection'?'collection':'deck');$('#collection-import').onclick=()=>importDialog('collection');$('#lookup-open').onclick=lookupDialog;$('#deck-drop').onclick=lookupDialog;
 $('#add-memory').onclick=()=>memoryDialog();$('#enrich').onclick=()=>run(enrichDeck);
 for(const id of ['undo','history-undo'])$('#'+id).onclick=()=>run(async()=>{await mutate('undo',{});toast('Last deck change undone.');});
-$('#backup').onclick=()=>download('forage-backup-'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify(state,null,2),'application/json');
+$('#backup').onclick=()=>run(async()=>{const exported=await api('backup');download('forage-backup-'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify(exported,null,2),'application/json');});
 function exportDeckDialog(){
  const exported=ForageCards.archidektExport(deck());
  modal('Export to Archidekt',`<p><strong>${exported.total} cards · Mainboard + commander</strong></p><p class="modal-note">Custom categories and commander designation are included. Excluded: ${exported.considering} Considering cards and ${exported.staging} cards in Swap In / Swap Out.</p><label class="field">Archidekt text import<textarea id="export-deck-text" rows="12" readonly>${esc(exported.text)}</textarea></label>${exported.total!==100?'<p class="notice">This export contains '+exported.total+' cards. Commander decks normally contain 100 including commanders.</p>':''}<div class="modal-actions"><button id="export-deck-download" class="button primary">Download deck</button></div><p class="modal-note">In Archidekt, import this list into a new empty deck to avoid adding copies to an existing list. Use its custom category grouping to display your categories.</p>`);
