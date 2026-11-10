@@ -74,12 +74,24 @@ def db():
     con=sqlite3.connect(DATA/'forage.sqlite3',timeout=30)
     con.execute('CREATE TABLE IF NOT EXISTS workspace (id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL)')
     con.execute('CREATE TABLE IF NOT EXISTS cache (name TEXT PRIMARY KEY, payload TEXT NOT NULL)')
+    con.execute('CREATE TABLE IF NOT EXISTS deck_versions (id TEXT PRIMARY KEY, deck_id TEXT NOT NULL, name TEXT NOT NULL, created_at TEXT NOT NULL, snapshot TEXT NOT NULL)')
+    con.execute('CREATE INDEX IF NOT EXISTS idx_deck_versions_deck ON deck_versions(deck_id, created_at)')
     return con
 
 def read_state():
     with db() as c:
         row=c.execute('SELECT payload FROM workspace WHERE id=1').fetchone()
-        if row: return json.loads(row[0])
+        if row:
+            state=json.loads(row[0])
+            # Migrate any snapshots created by the earlier inline implementation.
+            migrated=False
+            for deck in state['decks']+[e['deck'] for e in state.get('deleted_decks',[])]:
+                for version in deck.pop('saved_versions',[]):
+                    c.execute('INSERT OR IGNORE INTO deck_versions VALUES (?,?,?,?,?)',
+                        (version['id'],deck['id'],version['name'],version['created_at'],json.dumps(version['snapshot'])))
+                    migrated=True
+            if migrated:c.execute('UPDATE workspace SET payload=? WHERE id=1',(json.dumps(state),))
+            return state
         state=initial_state(); c.execute('INSERT INTO workspace VALUES (1,?)',(json.dumps(state),)); return state
 
 def write_state(state):
@@ -90,6 +102,71 @@ def deck_of(state,ident):
     deck=next((d for d in state['decks'] if d['id']==ident),None)
     if not deck: raise ValueError('Deck not found.')
     return deck
+
+
+DECK_VERSION_FIELDS=('cards','categories','swap_categories','view_settings')
+
+def list_deck_versions(deck_id):
+    with db() as c:
+        rows=c.execute('SELECT id,name,created_at,snapshot FROM deck_versions WHERE deck_id=? ORDER BY created_at DESC,id DESC',(deck_id,)).fetchall()
+    # Only this explicit listing reads snapshots, never a normal workspace refresh.
+    return [{'id':ident,'name':name,'created_at':created,
+             'card_count':sum(card.get('qty',0) for card in json.loads(snapshot).get('cards',[]))}
+            for ident,name,created,snapshot in rows]
+
+def save_deck_version(deck,name):
+    name=str(name or '').strip()[:120]
+    if not name:raise ValueError('Enter a version name.')
+    version={'id':uid(),'name':name,'created_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),
+             'snapshot':{field:copy.deepcopy(deck[field]) for field in DECK_VERSION_FIELDS if field in deck}}
+    with db() as c:
+        count=c.execute('SELECT COUNT(*) FROM deck_versions WHERE deck_id=?',(deck['id'],)).fetchone()[0]
+        if count>=100:raise ValueError('This deck already has 100 saved versions. Remove an older version first.')
+        c.execute('INSERT INTO deck_versions VALUES (?,?,?,?,?)',(version['id'],deck['id'],name,version['created_at'],json.dumps(version['snapshot'])))
+    return version
+
+def restore_deck_version(deck,version_id):
+    with db() as c:
+        row=c.execute('SELECT name,snapshot FROM deck_versions WHERE deck_id=? AND id=?',(deck['id'],version_id)).fetchone()
+    if not row:raise ValueError('Saved version not found.')
+    name,snapshot=row;snapshot=json.loads(snapshot)
+    before={field:copy.deepcopy(deck.get(field)) for field in DECK_VERSION_FIELDS}
+    deck.setdefault('history',[]).append({'id':uid(),'type':'version-restore',
+        'summary':'Restored saved version: '+name,
+        'before':before['cards'],
+        'before_categories':before['categories'],
+        'before_swap_categories':before['swap_categories'],
+        'before_view_settings':before['view_settings']})
+    for field in DECK_VERSION_FIELDS:
+        if field in snapshot:deck[field]=copy.deepcopy(snapshot[field])
+        else:deck.pop(field,None)
+
+def delete_deck_version(deck,version_id):
+    with db() as c:
+        cursor=c.execute('DELETE FROM deck_versions WHERE id=? AND deck_id=?',(version_id,deck['id']))
+        if cursor.rowcount!=1:raise ValueError('Saved version not found.')
+
+def workspace_backup(state):
+    exported=copy.deepcopy(state)
+    with db() as c:
+        for deck in exported['decks']+[e['deck'] for e in exported.get('deleted_decks',[])]:
+            rows=c.execute('SELECT id,name,created_at,snapshot FROM deck_versions WHERE deck_id=? ORDER BY created_at,id',(deck['id'],)).fetchall()
+            if rows:deck['saved_versions']=[{'id':ident,'name':name,'created_at':created,'snapshot':json.loads(snapshot)} for ident,name,created,snapshot in rows]
+    return exported
+
+def restore_workspace_backup(incoming):
+    # The workspace and snapshots are swapped atomically in one SQLite transaction.
+    new_state=copy.deepcopy(incoming)
+    snapshots=[]
+    for deck in new_state['decks']+[e['deck'] for e in new_state.get('deleted_decks',[])]:
+        for version in deck.pop('saved_versions',[]):
+            snapshots.append((version['id'],deck['id'],version['name'],version['created_at'],json.dumps(version['snapshot'])))
+    new_state['updated']=datetime.datetime.now(datetime.timezone.utc).isoformat()
+    with db() as c:
+        c.execute('DELETE FROM deck_versions')
+        c.executemany('INSERT INTO deck_versions VALUES (?,?,?,?,?)',snapshots)
+        c.execute('INSERT OR REPLACE INTO workspace VALUES (1,?)',(json.dumps(new_state),))
+    return new_state
 
 def delete_deck(state,ident,confirmed_name):
     deck=deck_of(state,ident)
@@ -606,8 +683,16 @@ class Handler(BaseHTTPRequestHandler):
             with LOCK: state=read_state()
             duplicates={deck['id']:duplicate_violations(deck) for deck in state['decks']}
             state.pop('transient',None); return self.send_json({'state':state,'token':TOKEN,'duplicate_violations':duplicates})
+        if path=='/api/deck-versions':
+            try:
+                query=urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+                with LOCK:
+                    state=read_state()
+                    deck=deck_of(state,query.get('deck',[''])[0])
+                    return self.send_json({'versions':list_deck_versions(deck['id'])})
+            except (ValueError,TypeError) as exc:return self.send_json({'error':str(exc)},400)
         if path=='/api/backup':
-            with LOCK: state=read_state()
+            with LOCK: state=workspace_backup(read_state())
             return self.send_json(state)
         if path=='/api/models':
             try:
@@ -638,11 +723,12 @@ class Handler(BaseHTTPRequestHandler):
         global UPDATE_EXIT
         if not self.valid_host() or self.headers.get('X-Forage-Token')!=TOKEN: return self.send_json({'error':'Reload the local app before making changes.'},403)
         try:
+            path=urllib.parse.urlsplit(self.path).path
             length=int(self.headers.get('Content-Length',0))
-            if not 0<length<12*1024*1024: raise ValueError('Request too large (maximum 12 MB).')
+            max_mb=128 if path=='/api/restore' else 12
+            if not 0<length<max_mb*1024*1024: raise ValueError('Request too large (maximum '+str(max_mb)+' MB).')
             payload=json.loads(self.rfile.read(length))
             if not isinstance(payload,dict): raise ValueError('Invalid request.')
-            path=urllib.parse.urlsplit(self.path).path
             if path=='/api/desktop':
                 action=payload.get('action')
                 if action=='quit':
@@ -769,6 +855,11 @@ class Handler(BaseHTTPRequestHandler):
                     name=str(payload.get('name','')).strip()[:120]
                     if not name: raise ValueError('Enter a deck name.')
                     d={'id':uid(),'name':name,'source':'Local deck','cards':[],'chat':[],'history':[],'proposals':[]};state['decks'].append(d);state['active']=d['id']
+                elif path=='/api/save-deck-version':
+                    save_deck_version(deck,payload.get('name'));return self.send_json({'ok':True})
+                elif path=='/api/restore-deck-version':restore_deck_version(deck,payload.get('version_id'))
+                elif path=='/api/delete-deck-version':
+                    delete_deck_version(deck,payload.get('version_id'));return self.send_json({'ok':True})
                 elif path=='/api/delete-deck':delete_deck(state,payload.get('id'),payload.get('confirmed_name'))
                 elif path=='/api/restore-deck':restore_deck(state,payload.get('id'))
                 elif path=='/api/import':
@@ -895,7 +986,9 @@ class Handler(BaseHTTPRequestHandler):
                     incoming=payload.get('state')
                     validate_backup(incoming)
                     backup=DATA/('before-restore-'+datetime.datetime.now().strftime('%Y%m%d-%H%M%S-%f')+'.json')
-                    backup.write_text(json.dumps(state),encoding='utf-8');state=incoming
+                    backup.write_text(json.dumps(workspace_backup(state)),encoding='utf-8')
+                    restore_workspace_backup(incoming)
+                    return self.send_json({'ok':True})
                 elif path=='/api/optimize-basics':
                     action=payload.get('action','preview');early=payload.get('early',True)
                     if action=='preview':return self.send_json(basic_land_plan(state,deck,early))
@@ -929,6 +1022,20 @@ def validate_backup(state):
         if not isinstance(d.get('name'),str):raise ValueError('Invalid deck name in backup.')
         for field in ['cards','chat','history','proposals']:
             if not isinstance(d.get(field),list):raise ValueError('Invalid deck data.')
+        versions=d.get('saved_versions',[])
+        if not isinstance(versions,list) or len(versions)>100:raise ValueError('Invalid saved deck versions.')
+        version_ids=set()
+        for saved in versions:
+            if not isinstance(saved,dict) or not isinstance(saved.get('id'),str) or not saved['id'] or saved['id'] in version_ids:raise ValueError('Invalid saved version ID.')
+            version_ids.add(saved['id'])
+            if not isinstance(saved.get('name'),str) or not isinstance(saved.get('created_at'),str):raise ValueError('Invalid saved version metadata.')
+            snapshot=saved.get('snapshot')
+            if not isinstance(snapshot,dict) or not isinstance(snapshot.get('cards'),list):raise ValueError('Invalid saved version snapshot.')
+            for card in snapshot['cards']:
+                if not isinstance(card,dict) or not isinstance(card.get('name'),str) or type(card.get('qty')) is not int or not 1<=card['qty']<=100000:raise ValueError('Invalid saved version card.')
+            for field in ('categories','swap_categories'):
+                if field in snapshot and not isinstance(snapshot[field],(list,dict)):raise ValueError('Invalid saved version categories.')
+            if 'view_settings' in snapshot and not isinstance(snapshot['view_settings'],dict):raise ValueError('Invalid saved version display settings.')
         for c in d['cards']:
             if not isinstance(c.get('name'),str) or not isinstance(c.get('qty'),int) or not 1<=c['qty']<=100000:raise ValueError('Invalid card in backup.')
     lm_config(state)

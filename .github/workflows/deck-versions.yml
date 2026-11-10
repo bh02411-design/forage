@@ -1,0 +1,44 @@
+name: Forage saved deck versions validation
+on:
+  pull_request:
+    paths:
+      - 'server.py'
+      - 'static/**'
+      - 'tests/test_deck_versions.py'
+      - '.github/workflows/deck-versions.yml'
+  push:
+    branches:
+      - feature/deck-saved-versions-20261109
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Compile Python
+        run: python -m compileall -q server.py core.py advisor.py launcher.py updater.py seed.py tests/test_deck_versions.py
+      - name: Run isolated regression tests
+        run: python -m unittest discover -s tests -p 'test_deck_versions.py' -v
+      - name: Run full Python release test suite
+        run: python -m unittest discover -s tests -p 'test*.py'
+      - name: Check JavaScript syntax
+        run: node --check static/app.js
+      - name: Run full JavaScript release test suite
+        run: |
+          node tests/test_cards.cjs
+          node tests/test_drag.cjs
+          node tests/test_move_performance.cjs
+          node tests/test_search.cjs
+          node tests/test_collection_sort.cjs
+          node tests/test_category_selection.cjs
+          node tests/test_swap_categories.cjs
+          node tests/test_render.cjs
+      - name: Build update package
+        run: python build_release.py --output dist/Forage-update.zip
