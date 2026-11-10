@@ -723,11 +723,12 @@ class Handler(BaseHTTPRequestHandler):
         global UPDATE_EXIT
         if not self.valid_host() or self.headers.get('X-Forage-Token')!=TOKEN: return self.send_json({'error':'Reload the local app before making changes.'},403)
         try:
+            path=urllib.parse.urlsplit(self.path).path
             length=int(self.headers.get('Content-Length',0))
-            if not 0<length<12*1024*1024: raise ValueError('Request too large (maximum 12 MB).')
+            max_mb=128 if path=='/api/restore' else 12
+            if not 0<length<max_mb*1024*1024: raise ValueError('Request too large (maximum '+str(max_mb)+' MB).')
             payload=json.loads(self.rfile.read(length))
             if not isinstance(payload,dict): raise ValueError('Invalid request.')
-            path=urllib.parse.urlsplit(self.path).path
             if path=='/api/desktop':
                 action=payload.get('action')
                 if action=='quit':
