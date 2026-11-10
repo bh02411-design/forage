@@ -91,6 +91,34 @@ def deck_of(state,ident):
     if not deck: raise ValueError('Deck not found.')
     return deck
 
+
+DECK_VERSION_FIELDS=('cards','categories','swap_categories','view_settings')
+
+def save_deck_version(deck,name):
+    name=str(name or '').strip()[:120]
+    if not name:raise ValueError('Enter a version name.')
+    versions=deck.setdefault('saved_versions',[])
+    if len(versions)>=100:raise ValueError('This deck already has 100 saved versions. Remove an older version first.')
+    version={'id':uid(),'name':name,'created_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),
+             'snapshot':{field:copy.deepcopy(deck[field]) for field in DECK_VERSION_FIELDS if field in deck}}
+    versions.append(version)
+    return version
+
+def restore_deck_version(deck,version_id):
+    version=next((v for v in deck.get('saved_versions',[]) if v.get('id')==version_id),None)
+    if not version:raise ValueError('Saved version not found.')
+    before={field:copy.deepcopy(deck.get(field)) for field in DECK_VERSION_FIELDS}
+    # Restore is reversible through Undo, without overwriting the saved version.
+    deck.setdefault('history',[]).append({'id':uid(),'type':'version-restore',
+        'summary':'Restored saved version: '+version['name'],
+        'before':before['cards'],
+        'before_categories':before['categories'],
+        'before_swap_categories':before['swap_categories'],
+        'before_view_settings':before['view_settings']})
+    for field in DECK_VERSION_FIELDS:
+        if field in version['snapshot']:deck[field]=copy.deepcopy(version['snapshot'][field])
+        else:deck.pop(field,None)
+
 def delete_deck(state,ident,confirmed_name):
     deck=deck_of(state,ident)
     if confirmed_name!=deck['name']:raise ValueError('The deck name changed. Reopen Delete deck and confirm again.')
@@ -769,6 +797,13 @@ class Handler(BaseHTTPRequestHandler):
                     name=str(payload.get('name','')).strip()[:120]
                     if not name: raise ValueError('Enter a deck name.')
                     d={'id':uid(),'name':name,'source':'Local deck','cards':[],'chat':[],'history':[],'proposals':[]};state['decks'].append(d);state['active']=d['id']
+                elif path=='/api/save-deck-version':save_deck_version(deck,payload.get('name'))
+                elif path=='/api/restore-deck-version':restore_deck_version(deck,payload.get('version_id'))
+                elif path=='/api/delete-deck-version':
+                    versions=deck.get('saved_versions',[])
+                    version=next((v for v in versions if v.get('id')==payload.get('version_id')),None)
+                    if not version:raise ValueError('Saved version not found.')
+                    versions.remove(version)
                 elif path=='/api/delete-deck':delete_deck(state,payload.get('id'),payload.get('confirmed_name'))
                 elif path=='/api/restore-deck':restore_deck(state,payload.get('id'))
                 elif path=='/api/import':
@@ -929,6 +964,20 @@ def validate_backup(state):
         if not isinstance(d.get('name'),str):raise ValueError('Invalid deck name in backup.')
         for field in ['cards','chat','history','proposals']:
             if not isinstance(d.get(field),list):raise ValueError('Invalid deck data.')
+        versions=d.get('saved_versions',[])
+        if not isinstance(versions,list) or len(versions)>100:raise ValueError('Invalid saved deck versions.')
+        version_ids=set()
+        for saved in versions:
+            if not isinstance(saved,dict) or not isinstance(saved.get('id'),str) or not saved['id'] or saved['id'] in version_ids:raise ValueError('Invalid saved version ID.')
+            version_ids.add(saved['id'])
+            if not isinstance(saved.get('name'),str) or not isinstance(saved.get('created_at'),str):raise ValueError('Invalid saved version metadata.')
+            snapshot=saved.get('snapshot')
+            if not isinstance(snapshot,dict) or not isinstance(snapshot.get('cards'),list):raise ValueError('Invalid saved version snapshot.')
+            for card in snapshot['cards']:
+                if not isinstance(card,dict) or not isinstance(card.get('name'),str) or type(card.get('qty')) is not int or not 1<=card['qty']<=100000:raise ValueError('Invalid saved version card.')
+            for field in ('categories','swap_categories'):
+                if field in snapshot and not isinstance(snapshot[field],(list,dict)):raise ValueError('Invalid saved version categories.')
+            if 'view_settings' in snapshot and not isinstance(snapshot['view_settings'],dict):raise ValueError('Invalid saved version display settings.')
         for c in d['cards']:
             if not isinstance(c.get('name'),str) or not isinstance(c.get('qty'),int) or not 1<=c['qty']<=100000:raise ValueError('Invalid card in backup.')
     lm_config(state)
