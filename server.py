@@ -745,6 +745,47 @@ class Handler(BaseHTTPRequestHandler):
                     UPDATE_EXIT=77
                 self.send_json({'ok':True,'status':'tray_starting' if action=='configure' else 'quitting'})
                 threading.Thread(target=self.server.shutdown,daemon=True).start();return
+            if path=='/api/mcp-updates':
+                # Private bridge uses the existing loopback mutation token.
+                # Only the trusted configured release source is accepted.
+                action=payload.get('action')
+                if action=='check':
+                    with updater.UPDATE_LOCK:
+                        result=updater.check(ROOT,DATA)
+                    return self.send_json({'ok':True,**result})
+                if action=='status':
+                    return self.send_json({'ok':True,**updater.status(ROOT,DATA)})
+                if action=='stage':
+                    if payload.get('confirm') is not True:
+                        raise ValueError('Explicit user approval is required to stage an update.')
+                    expected=payload.get('expected_version')
+                    if not isinstance(expected,str) or not re.fullmatch(r'\\d+\\.\\d+\\.\\d+',expected):
+                        raise ValueError('Use the exact version from a fresh update check.')
+                    with updater.UPDATE_LOCK:
+                        latest=updater.check(ROOT,DATA)
+                        if latest.get('status')!='available' or latest.get('version')!=expected:
+                            raise ValueError('The latest release differs from the approved version; check again.')
+                        result=updater.stage(ROOT,DATA)
+                    return self.send_json({'ok':True,**result})
+                if action=='restart':
+                    if payload.get('confirm') is not True:
+                        raise ValueError('Explicit user approval is required to restart Forage.')
+                    expected=payload.get('expected_version')
+                    if not isinstance(expected,str) or not re.fullmatch(r'\\d+\\.\\d+\\.\\d+',expected):
+                        raise ValueError('Specify the exact staged update version.')
+                    if os.environ.get('FORAGE_LAUNCHER')!='1':
+                        raise ValueError('Forage must run from its launcher for safe restart.')
+                    info=updater.status(ROOT,DATA)
+                    if not info.get('pending') or info['pending']['version']!=expected:
+                        raise ValueError('No approved update of that version is staged.')
+                    with REQUEST_LOCK:
+                        if ACTIVE_WRITES!=1:
+                            raise ValueError('Another request is active. Retry after it finishes.')
+                        UPDATE_EXIT=75
+                    self.send_json({'ok':True,'status':'restarting','version':expected})
+                    threading.Thread(target=self.server.shutdown,daemon=True).start()
+                    return
+                raise ValueError('Unsupported remote updater action.')
             if path=='/api/updates':
                 action=payload.get('action')
                 if action=='configure':
