@@ -213,7 +213,7 @@ def propose_swap(args, state):
 def local_mutation(path, payload):
     """Use Forage's loopback-only browser token without ever exposing it to MCP."""
     port = integer(os.environ.get("FORAGE_PORT", "8765"), 8765, 1, 65535)
-    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=15)
+    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=180 if path == "/api/mcp-updates" and payload.get("action") == "stage" else 15)
     try:
         connection.request("GET", "/api/state", headers={"Accept": "application/json"})
         with connection.getresponse() as response:
@@ -273,6 +273,38 @@ def apply_deck_swap(args, state):
                           {"action": "apply", "deck": deck["id"],
                            "add": add.strip(), "cut": cut.strip(),
                            "expected_deck_sha": expected, "confirm": True})
+
+
+def check_updates(args, state):
+    """Read remote release state without installing anything."""
+    return local_mutation("/api/mcp-updates", {"action": "check"})
+
+
+def update_status(args, state):
+    """Read local pending version/rollback status."""
+    return local_mutation("/api/mcp-updates", {"action": "status"})
+
+
+def install_update(args, state):
+    """Stage exactly the version approved by the user; no restart."""
+    if args.get("confirm") is not True:
+        raise ValueError("Explicit user approval is required to stage an update.")
+    version = args.get("expected_version")
+    if not isinstance(version, str) or not re.fullmatch(r"\\d+\\.\\d+\\.\\d+", version):
+        raise ValueError("Use the exact version from a fresh update check.")
+    return local_mutation("/api/mcp-updates", {
+        "action": "stage", "expected_version": version, "confirm": True})
+
+
+def restart_forage(args, state):
+    """Restart the launcher to activate one approved staged version."""
+    if args.get("confirm") is not True:
+        raise ValueError("Explicit user approval is required to restart Forage.")
+    version = args.get("expected_version")
+    if not isinstance(version, str) or not re.fullmatch(r"\\d+\\.\\d+\\.\\d+", version):
+        raise ValueError("Specify the approved staged version.")
+    return local_mutation("/api/mcp-updates", {
+        "action": "restart", "expected_version": version, "confirm": True})
 
 
 def preview_collection_import(args, state):
@@ -344,6 +376,24 @@ TOOLS = [
          "confirm": {"type": "boolean"}},
          "required": ["add", "cut", "expected_deck_sha", "confirm"],
          "additionalProperties": False}},
+    {"name": "check_updates",
+     "description": "Check the configured trusted GitHub releases for a newer verified Forage version. Read-only, never installs.",
+     "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False}},
+    {"name": "update_status",
+     "description": "Read the installed and staged Forage versions and rollback availability. Never changes application files.",
+     "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False}},
+    {"name": "install_update",
+     "description": "WRITE: Download, verify, and stage only the exact latest release approved by the user, without restarting. Requires explicit user approval and expected version from check_updates.",
+     "inputSchema": {"type": "object", "properties": {
+         "expected_version": {"type": "string"},
+         "confirm": {"type": "boolean"}},
+         "required": ["expected_version", "confirm"], "additionalProperties": False}},
+    {"name": "restart_forage",
+     "description": "WRITE: Activate a previously verified, staged update by restarting Forage via its launcher. Requires explicit user approval and exact staged version. MCP connection may temporarily disconnect.",
+     "inputSchema": {"type": "object", "properties": {
+         "expected_version": {"type": "string"},
+         "confirm": {"type": "boolean"}},
+         "required": ["expected_version", "confirm"], "additionalProperties": False}},
     {"name": "preview_collection_import",
      "description": "Validate a proposed whole-collection replacement without changing Forage. Return exact SHA-256 confirmation values and count differences. Import preserves decks but replaces collection entries.",
      "inputSchema": {"type": "object", "properties": {
@@ -367,7 +417,8 @@ TOOLS = [
 ]
 for item in TOOLS:
     item["annotations"] = {"readOnlyHint": item["name"] not in (
-        "apply_collection_import", "create_deck_version", "apply_deck_swap"),
+        "apply_collection_import", "create_deck_version", "apply_deck_swap",
+        "install_update", "restart_forage"),
         "destructiveHint": item["name"] == "apply_collection_import",
         "openWorldHint": False}
 
@@ -379,6 +430,10 @@ HANDLERS = {
     "propose_swap": propose_swap,
     "preview_deck_swap": preview_deck_swap,
     "apply_deck_swap": apply_deck_swap,
+    "check_updates": check_updates,
+    "update_status": update_status,
+    "install_update": install_update,
+    "restart_forage": restart_forage,
     "preview_collection_import": preview_collection_import,
     "apply_collection_import": apply_collection_import,
     "create_deck_version": create_deck_version,

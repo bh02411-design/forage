@@ -26,6 +26,19 @@ The write tools are still accessible **only through the private stdio MCP tunnel
 
 Other write actions (separate add/remove operations, sleeve tags, restores) are **not yet exposed**. Continue using Forage's local UI for those operations until separately reviewed and tested.
 
+## Remote application updates (opt-in)
+
+After the first local upgrade of **both** Forage and the MCP bridge, ChatGPT can use:
+
+- `check_updates` — check the configured trusted GitHub releases; does not install anything.
+- `update_status` — read current/pending versions and rollback availability.
+- `install_update` — with explicit user approval and the exact version found by a fresh check, download, verify hashes, check compatibility, and stage the latest release. Does not restart Forage.
+- `restart_forage` — with separate explicit approval for the exact staged version, ask the existing launcher to restart Forage. A restarted app may interrupt the MCP connection; verify `list_decks` once the tunnel reconnects.
+
+The bridge never accepts arbitrary URLs, repository changes, ZIP uploads, older version targets, or rollback requests. The application updater's existing release validation, compatibility checks, startup recovery and backup behavior remain authoritative.
+
+**Bootstrap limitation:** Current release archives do not package `mcp_bridge.py`, and existing installations may run a standalone copy through the Secure MCP Tunnel. To enable these tools, initially install a compatible Forage release locally, replace the tunnel's `mcp_bridge.py` with the updated repository copy, then restart the tunnel and refresh tools. Subsequent Forage *application* releases can be staged/restarted remotely, but a future bridge-code change may still require updating that separate file. Do not assume `restart_forage` automatically restarts the independent tunnel.
+
 ## Start locally
 
 1. Update or install Forage normally and keep it running on your Windows PC. This preview requires `mcp_bridge.py` from this branch or a future release that contains it.
