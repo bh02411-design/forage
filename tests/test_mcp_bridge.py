@@ -82,8 +82,8 @@ class BridgeTests(unittest.TestCase):
         messages = [json.loads(line) for line in output.getvalue().splitlines()]
         self.assertEqual([x["id"] for x in messages], [1, 2, 3])
         self.assertEqual(messages[0]["result"]["serverInfo"]["name"], "forage-private")
-        self.assertEqual(len(messages[1]["result"]["tools"]), 5)
-        self.assertTrue(all(tool["annotations"]["readOnlyHint"] for tool in messages[1]["result"]["tools"]))
+        self.assertEqual(len(messages[1]["result"]["tools"]), 8)
+        self.assertEqual(sum(not tool["annotations"]["readOnlyHint"] for tool in messages[1]["result"]["tools"]), 2)
         self.assertNotIn("never-expose-this", output.getvalue())
 
     def test_no_credential_or_arbitrary_url_arguments(self):
@@ -91,6 +91,45 @@ class BridgeTests(unittest.TestCase):
             self.assertNotIn("url", tool["inputSchema"]["properties"])
             self.assertNotIn("token", tool["inputSchema"]["properties"])
         self.assertEqual(bridge.normalize("Dour Port-Mage"), bridge.normalize("Dour Port Mage"))
+
+
+class WriteToolTests(unittest.TestCase):
+    def test_preview_does_not_apply(self):
+        with patch.object(bridge, "local_mutation", return_value={
+            "ok": True, "saved": False, "status": "preview",
+            "incoming_entries": 2, "incoming_copies": 3}) as mutation:
+            response = bridge.preview_collection_import({"text": "2 Island (FDN) 1"}, fixture())
+        self.assertFalse(response["saved"])
+        mutation.assert_called_once_with("/api/mcp-collection-import",
+                                         {"action": "preview", "text": "2 Island (FDN) 1"})
+
+    def test_apply_requires_confirmation_and_sha(self):
+        values = {"text": "1 Island (FDN) 1", "confirm": False,
+                  "expected_collection_sha": "a" * 64, "expected_import_sha": "b" * 64}
+        with patch.object(bridge, "local_mutation") as mutation:
+            with self.assertRaisesRegex(ValueError, "approval"):
+                bridge.apply_collection_import(values, fixture())
+            mutation.assert_not_called()
+        values["confirm"] = True
+        with patch.object(bridge, "local_mutation", return_value={"ok": True, "saved": True}) as mutation:
+            self.assertTrue(bridge.apply_collection_import(values, fixture())["saved"])
+            mutation.assert_called_once()
+            posted = mutation.call_args.args[1]
+            self.assertEqual(posted["expected_collection_sha"], "a" * 64)
+            self.assertEqual(posted["expected_import_sha"], "b" * 64)
+
+    def test_named_version_selects_existing_deck(self):
+        with patch.object(bridge, "local_mutation", return_value={"ok": True}) as mutation:
+            response = bridge.create_deck_version({"deck_id": "frog", "name": "Before swaps"}, fixture())
+            self.assertTrue(response["saved"])
+            mutation.assert_called_once_with("/api/save-deck-version",
+                                             {"deck": "frog", "name": "Before swaps"})
+
+    def test_tool_annotations(self):
+        mapping = {item["name"]: item["annotations"] for item in bridge.TOOLS}
+        self.assertTrue(mapping["preview_collection_import"]["readOnlyHint"])
+        self.assertTrue(mapping["apply_collection_import"]["destructiveHint"])
+        self.assertFalse(mapping["create_deck_version"]["destructiveHint"])
 
 
 class WorkspaceReadTests(unittest.TestCase):
