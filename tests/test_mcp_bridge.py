@@ -82,8 +82,8 @@ class BridgeTests(unittest.TestCase):
         messages = [json.loads(line) for line in output.getvalue().splitlines()]
         self.assertEqual([x["id"] for x in messages], [1, 2, 3])
         self.assertEqual(messages[0]["result"]["serverInfo"]["name"], "forage-private")
-        self.assertEqual(len(messages[1]["result"]["tools"]), 10)
-        self.assertEqual(sum(not tool["annotations"]["readOnlyHint"] for tool in messages[1]["result"]["tools"]), 3)
+        self.assertEqual(len(messages[1]["result"]["tools"]), 14)
+        self.assertEqual(sum(not tool["annotations"]["readOnlyHint"] for tool in messages[1]["result"]["tools"]), 5)
         self.assertNotIn("never-expose-this", output.getvalue())
 
     def test_no_credential_or_arbitrary_url_arguments(self):
@@ -157,6 +157,27 @@ class WriteToolTests(unittest.TestCase):
             "action": "apply", "deck": "frog", "add": "Ponder",
             "cut": "Dour Port-Mage", "expected_deck_sha": "a" * 64,
             "confirm": True})
+
+    def test_remote_update_tools_require_confirmation(self):
+        with patch.object(bridge, "local_mutation", return_value={
+            "ok": True, "status": "available", "version": "0.2.47"}) as mutation:
+            bridge.check_updates({}, fixture())
+            mutation.assert_called_once_with("/api/mcp-updates", {"action": "check"})
+        with patch.object(bridge, "local_mutation", return_value={
+            "ok": True, "pending": {"version": "0.2.47"}}) as mutation:
+            bridge.update_status({}, fixture())
+            mutation.assert_called_once_with("/api/mcp-updates", {"action": "status"})
+        for handler,action in ((bridge.install_update,"stage"), (bridge.restart_forage,"restart")):
+            with self.subTest(action=action), patch.object(bridge, "local_mutation") as mutation:
+                with self.assertRaisesRegex(ValueError, "approval"):
+                    handler({"expected_version": "0.2.47", "confirm": False}, fixture())
+                with self.assertRaisesRegex(ValueError, "version"):
+                    handler({"expected_version": "latest", "confirm": True}, fixture())
+                mutation.assert_not_called()
+            with patch.object(bridge, "local_mutation", return_value={"ok": True}) as mutation:
+                handler({"expected_version": "0.2.47", "confirm": True}, fixture())
+                mutation.assert_called_once_with("/api/mcp-updates", {
+                    "action": action, "expected_version": "0.2.47", "confirm": True})
 
     def test_tool_annotations(self):
         mapping = {item["name"]: item["annotations"] for item in bridge.TOOLS}
