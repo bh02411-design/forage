@@ -210,6 +210,79 @@ def propose_swap(args, state):
             "note": "Preview only. No deck or collection data has been changed."}
 
 
+def local_mutation(path, payload):
+    """Use Forage's loopback-only browser token without ever exposing it to MCP."""
+    port = integer(os.environ.get("FORAGE_PORT", "8765"), 8765, 1, 65535)
+    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=15)
+    try:
+        connection.request("GET", "/api/state", headers={"Accept": "application/json"})
+        with connection.getresponse() as response:
+            if response.status != 200:
+                raise ValueError("Cannot authorize local Forage write.")
+            raw = response.read(MAX_WORKSPACE_MIB * MIB + 1)
+            if len(raw) > MAX_WORKSPACE_MIB * MIB:
+                raise ValueError("Forage workspace exceeds write authorization limit.")
+        token = json.loads(raw).get("token")
+        if not isinstance(token, str) or not token:
+            raise ValueError("Forage write authorization is unavailable.")
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        if len(body) >= 12 * MIB:
+            raise ValueError("Collection import exceeds Forage's 12 MiB request limit.")
+        connection.request("POST", path, body=body,
+                           headers={"Accept": "application/json",
+                                    "Content-Type": "application/json",
+                                    "X-Forage-Token": token})
+        with connection.getresponse() as response:
+            status = response.status
+            raw = response.read(MIB + 1)
+        if len(raw) > MIB:
+            raise ValueError("Forage write response is unexpectedly large.")
+        result = json.loads(raw)
+        if not isinstance(result, dict):
+            raise ValueError("Unexpected Forage write response.")
+        if status != 200 or not result.get("ok"):
+            raise ValueError("Forage refused the requested change; check the local app.")
+        return result
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError("Cannot complete local Forage write.") from None
+    finally:
+        connection.close()
+
+
+def preview_collection_import(args, state):
+    raw = args.get("text")
+    if not isinstance(raw, str) or not raw.strip():
+        raise ValueError("Provide nonempty collection import text.")
+    return local_mutation("/api/mcp-collection-import", {"action": "preview", "text": raw})
+
+
+def apply_collection_import(args, state):
+    if args.get("confirm") is not True:
+        raise ValueError("User approval is required; confirm must be true.")
+    raw = args.get("text")
+    if not isinstance(raw, str) or not raw.strip():
+        raise ValueError("Provide the same import text used during preview.")
+    for field in ("expected_collection_sha", "expected_import_sha"):
+        value = args.get(field)
+        if not isinstance(value, str) or not re.fullmatch(r"[a-f0-9]{64}", value):
+            raise ValueError("Use the exact SHA-256 values from a fresh preview.")
+    return local_mutation("/api/mcp-collection-import",
+                          {"action": "apply", "text": raw, "confirm": True,
+                           "expected_collection_sha": args["expected_collection_sha"],
+                           "expected_import_sha": args["expected_import_sha"]})
+
+
+def create_deck_version(args, state):
+    deck = find_deck(state, args.get("deck_id"))
+    name = args.get("name")
+    if not isinstance(name, str) or not name.strip() or len(name) > 120:
+        raise ValueError("A version name (1–120 characters) is required.")
+    result = local_mutation("/api/save-deck-version",
+                            {"deck": deck["id"], "name": name.strip()})
+    return {"saved": True, "deck_id": deck["id"], "deck_name": deck["name"],
+            "version_name": name.strip(), "result": result}
+
+
 TOOLS = [
     {"name": "list_decks", "description": "List local Forage decks, deck IDs, and mainboard counts.",
      "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False}},
@@ -231,10 +304,33 @@ TOOLS = [
     {"name": "propose_swap", "description": "Preview one add/cut swap against the current deck, owned copies and commander identity. Read-only; never applies edits.",
      "inputSchema": {"type": "object", "properties": {
          "deck_id": {"type": "string"}, "add": {"type": "string"}, "cut": {"type": "string"}},
-         "required": ["add", "cut"], "additionalProperties": False}},
+         "required": ["add", "cut"], "additionalProperties": False}},,
+    {"name": "preview_collection_import",
+     "description": "Validate a proposed whole-collection replacement without changing Forage. Return exact SHA-256 confirmation values and count differences. Import preserves decks but replaces collection entries.",
+     "inputSchema": {"type": "object", "properties": {
+         "text": {"type": "string", "description": "Complete Forage card list: quantity, card name, set and collector number"}},
+         "required": ["text"], "additionalProperties": False}},
+    {"name": "apply_collection_import",
+     "description": "DESTRUCTIVE: Replace the whole owned collection after an explicit user approval and matching fresh preview. Creates a full local SQLite backup first. Never call without user approval.",
+     "inputSchema": {"type": "object", "properties": {
+         "text": {"type": "string"},
+         "expected_collection_sha": {"type": "string"},
+         "expected_import_sha": {"type": "string"},
+         "confirm": {"type": "boolean", "description": "True only after explicit approval to replace the collection"}},
+         "required": ["text", "expected_collection_sha", "expected_import_sha", "confirm"],
+         "additionalProperties": False}},
+    {"name": "create_deck_version",
+     "description": "Save a named snapshot of an existing deck without changing its cards.",
+     "inputSchema": {"type": "object", "properties": {
+         "deck_id": {"type": "string"},
+         "name": {"type": "string", "maxLength": 120}},
+         "required": ["name"], "additionalProperties": False}}
 ]
 for item in TOOLS:
-    item["annotations"] = {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False}
+    item["annotations"] = {"readOnlyHint": item["name"] not in (
+        "preview_collection_import", "apply_collection_import", "create_deck_version"),
+        "destructiveHint": item["name"] == "apply_collection_import",
+        "openWorldHint": False}
 
 HANDLERS = {
     "list_decks": list_decks,
@@ -242,6 +338,9 @@ HANDLERS = {
     "search_collection": search_collection,
     "card_availability": card_availability,
     "propose_swap": propose_swap,
+    "preview_collection_import": preview_collection_import,
+    "apply_collection_import": apply_collection_import,
+    "create_deck_version": create_deck_version,
 }
 
 
