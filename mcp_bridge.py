@@ -304,7 +304,7 @@ TOOLS = [
     {"name": "propose_swap", "description": "Preview one add/cut swap against the current deck, owned copies and commander identity. Read-only; never applies edits.",
      "inputSchema": {"type": "object", "properties": {
          "deck_id": {"type": "string"}, "add": {"type": "string"}, "cut": {"type": "string"}},
-         "required": ["add", "cut"], "additionalProperties": False}},,
+         "required": ["add", "cut"], "additionalProperties": False}},
     {"name": "preview_collection_import",
      "description": "Validate a proposed whole-collection replacement without changing Forage. Return exact SHA-256 confirmation values and count differences. Import preserves decks but replaces collection entries.",
      "inputSchema": {"type": "object", "properties": {
@@ -328,7 +328,7 @@ TOOLS = [
 ]
 for item in TOOLS:
     item["annotations"] = {"readOnlyHint": item["name"] not in (
-        "preview_collection_import", "apply_collection_import", "create_deck_version"),
+        "apply_collection_import", "create_deck_version"),
         "destructiveHint": item["name"] == "apply_collection_import",
         "openWorldHint": False}
 
