@@ -82,8 +82,8 @@ class BridgeTests(unittest.TestCase):
         messages = [json.loads(line) for line in output.getvalue().splitlines()]
         self.assertEqual([x["id"] for x in messages], [1, 2, 3])
         self.assertEqual(messages[0]["result"]["serverInfo"]["name"], "forage-private")
-        self.assertEqual(len(messages[1]["result"]["tools"]), 8)
-        self.assertEqual(sum(not tool["annotations"]["readOnlyHint"] for tool in messages[1]["result"]["tools"]), 2)
+        self.assertEqual(len(messages[1]["result"]["tools"]), 10)
+        self.assertEqual(sum(not tool["annotations"]["readOnlyHint"] for tool in messages[1]["result"]["tools"]), 3)
         self.assertNotIn("never-expose-this", output.getvalue())
 
     def test_no_credential_or_arbitrary_url_arguments(self):
@@ -125,9 +125,44 @@ class WriteToolTests(unittest.TestCase):
             mutation.assert_called_once_with("/api/save-deck-version",
                                              {"deck": "frog", "name": "Before swaps"})
 
+    def test_swap_preview_uses_local_guarded_route(self):
+        with patch.object(bridge, "local_mutation", return_value={
+            "ok": True, "saved": False, "deck_sha": "a" * 64}) as mutation:
+            result = bridge.preview_deck_swap(
+                {"deck_id": "frog", "add": "Ponder", "cut": "Dour Port-Mage"}, fixture())
+        self.assertFalse(result["saved"])
+        mutation.assert_called_once_with("/api/mcp-deck-swap", {
+            "action": "preview", "deck": "frog",
+            "add": "Ponder", "cut": "Dour Port-Mage"})
+
+    def test_swap_apply_requires_explicit_confirmation_and_snapshot(self):
+        args = {"deck_id": "frog", "add": "Ponder", "cut": "Dour Port-Mage",
+                "expected_deck_sha": "a" * 64, "confirm": False}
+        with patch.object(bridge, "local_mutation") as mutation:
+            with self.assertRaisesRegex(ValueError, "approval"):
+                bridge.apply_deck_swap(args, fixture())
+            mutation.assert_not_called()
+        args["confirm"] = True
+        args["expected_deck_sha"] = "not-a-hash"
+        with patch.object(bridge, "local_mutation") as mutation:
+            with self.assertRaisesRegex(ValueError, "SHA-256"):
+                bridge.apply_deck_swap(args, fixture())
+            mutation.assert_not_called()
+        args["expected_deck_sha"] = "a" * 64
+        with patch.object(bridge, "local_mutation", return_value={
+            "ok": True, "saved": True}) as mutation:
+            result = bridge.apply_deck_swap(args, fixture())
+        self.assertTrue(result["saved"])
+        mutation.assert_called_once_with("/api/mcp-deck-swap", {
+            "action": "apply", "deck": "frog", "add": "Ponder",
+            "cut": "Dour Port-Mage", "expected_deck_sha": "a" * 64,
+            "confirm": True})
+
     def test_tool_annotations(self):
         mapping = {item["name"]: item["annotations"] for item in bridge.TOOLS}
         self.assertTrue(mapping["preview_collection_import"]["readOnlyHint"])
+        self.assertTrue(mapping["preview_deck_swap"]["readOnlyHint"])
+        self.assertFalse(mapping["apply_deck_swap"]["readOnlyHint"])
         self.assertTrue(mapping["apply_collection_import"]["destructiveHint"])
         self.assertFalse(mapping["create_deck_version"]["destructiveHint"])
 

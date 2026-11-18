@@ -249,6 +249,32 @@ def local_mutation(path, payload):
         connection.close()
 
 
+def preview_deck_swap(args, state):
+    deck = find_deck(state, args.get("deck_id"))
+    add, cut = args.get("add"), args.get("cut")
+    if not isinstance(add, str) or not isinstance(cut, str) or not add.strip() or not cut.strip():
+        raise ValueError("Provide add and cut card names.")
+    return local_mutation("/api/mcp-deck-swap",
+                          {"action": "preview", "deck": deck["id"],
+                           "add": add.strip(), "cut": cut.strip()})
+
+
+def apply_deck_swap(args, state):
+    if args.get("confirm") is not True:
+        raise ValueError("Explicit user approval is required; confirm must be true.")
+    deck = find_deck(state, args.get("deck_id"))
+    add, cut = args.get("add"), args.get("cut")
+    expected = args.get("expected_deck_sha")
+    if not isinstance(add, str) or not isinstance(cut, str) or not add.strip() or not cut.strip():
+        raise ValueError("Provide add and cut card names.")
+    if not isinstance(expected, str) or not re.fullmatch(r"[a-f0-9]{64}", expected):
+        raise ValueError("Use the exact deck SHA-256 from a fresh preview.")
+    return local_mutation("/api/mcp-deck-swap",
+                          {"action": "apply", "deck": deck["id"],
+                           "add": add.strip(), "cut": cut.strip(),
+                           "expected_deck_sha": expected, "confirm": True})
+
+
 def preview_collection_import(args, state):
     raw = args.get("text")
     if not isinstance(raw, str) or not raw.strip():
@@ -305,6 +331,19 @@ TOOLS = [
      "inputSchema": {"type": "object", "properties": {
          "deck_id": {"type": "string"}, "add": {"type": "string"}, "cut": {"type": "string"}},
          "required": ["add", "cut"], "additionalProperties": False}},
+    {"name": "preview_deck_swap",
+     "description": "Read-only validated one-for-one deck-swap preview with a deck version SHA-256. Does not change the deck.",
+     "inputSchema": {"type": "object", "properties": {
+         "deck_id": {"type": "string"}, "add": {"type": "string"}, "cut": {"type": "string"}},
+         "required": ["add", "cut"], "additionalProperties": False}},
+    {"name": "apply_deck_swap",
+     "description": "WRITE: Apply one previously previewed swap to a 100-card Commander deck. Requires explicit approval, fresh deck SHA-256, owned card, valid identity and legality. Creates a local SQLite backup and verifies the result.",
+     "inputSchema": {"type": "object", "properties": {
+         "deck_id": {"type": "string"}, "add": {"type": "string"},
+         "cut": {"type": "string"}, "expected_deck_sha": {"type": "string"},
+         "confirm": {"type": "boolean"}},
+         "required": ["add", "cut", "expected_deck_sha", "confirm"],
+         "additionalProperties": False}},
     {"name": "preview_collection_import",
      "description": "Validate a proposed whole-collection replacement without changing Forage. Return exact SHA-256 confirmation values and count differences. Import preserves decks but replaces collection entries.",
      "inputSchema": {"type": "object", "properties": {
@@ -328,7 +367,7 @@ TOOLS = [
 ]
 for item in TOOLS:
     item["annotations"] = {"readOnlyHint": item["name"] not in (
-        "apply_collection_import", "create_deck_version"),
+        "apply_collection_import", "create_deck_version", "apply_deck_swap"),
         "destructiveHint": item["name"] == "apply_collection_import",
         "openWorldHint": False}
 
@@ -338,6 +377,8 @@ HANDLERS = {
     "search_collection": search_collection,
     "card_availability": card_availability,
     "propose_swap": propose_swap,
+    "preview_deck_swap": preview_deck_swap,
+    "apply_deck_swap": apply_deck_swap,
     "preview_collection_import": preview_collection_import,
     "apply_collection_import": apply_collection_import,
     "create_deck_version": create_deck_version,
