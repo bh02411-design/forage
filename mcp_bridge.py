@@ -213,7 +213,7 @@ def propose_swap(args, state):
 def local_mutation(path, payload):
     """Use Forage's loopback-only browser token without ever exposing it to MCP."""
     port = integer(os.environ.get("FORAGE_PORT", "8765"), 8765, 1, 65535)
-    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=15)
+    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=180 if path == "/api/mcp-updates" and payload.get("action") == "stage" else 15)
     try:
         connection.request("GET", "/api/state", headers={"Accept": "application/json"})
         with connection.getresponse() as response:
