@@ -841,12 +841,90 @@ class Handler(BaseHTTPRequestHandler):
                 if payload.get('resolve') is True:
                     snapshot=read_state();target=deck_of(snapshot,payload.get('deck',snapshot['active']))
                     category_resolved,category_fetch_failed=category_metadata(snapshot,target,requested_zone)
+            mcp_swap_card=None
+            if path=='/api/mcp-deck-swap':
+                if payload.get('action') not in ('preview','apply'):
+                    raise ValueError('Expected preview or apply.')
+                add=payload.get('add')
+                if not isinstance(add,str) or not add.strip() or len(add)>180:
+                    raise ValueError('Provide a valid addition name.')
+                # Scryfall is accessed outside the workspace lock.
+                mcp_swap_card=lookup(add)
+                if key(mcp_swap_card['name'])!=key(add):
+                    raise ValueError('Card resolution did not match the requested name.')
             resolved=None
             if path=='/api/proposal' and payload.get('action')=='accept':
                 state=read_state(); deck=deck_of(state,payload['deck']); p=next(p for p in deck['proposals'] if p['id']==payload['id'])
                 resolved=lookup(p['add'])
             with LOCK:
                 state=read_state(); deck=deck_of(state,payload.get('deck',state['active']))
+                if path=='/api/mcp-deck-swap':
+                    # Private bridge only: explicit one-for-one edit, never a bulk deck rewrite.
+                    add=payload.get('add');cut=payload.get('cut')
+                    if not isinstance(cut,str) or not cut.strip() or len(cut)>180 or key(add)==key(cut):
+                        raise ValueError('Provide two distinct card names.')
+                    deck_sha=hashlib.sha256(json.dumps(deck['cards'],sort_keys=True,
+                                      separators=(',',':')).encode()).hexdigest()
+                    active=[c for c in deck['cards'] if c['zone'] in ('main','commander')
+                            and (c['zone']=='commander' or c.get('group') not in
+                                 set((deck.get('swap_categories') or {'in':'Swap In','out':'Swap Out'}).values()))]
+                    target=next((c for c in active if c['zone']=='main' and key(c['name'])==key(cut)),None)
+                    if target is None:raise ValueError('The cut is not in the active mainboard.')
+                    if target.get('protected'):raise ValueError('The selected card is protected.')
+                    if int(target.get('qty',1))!=1:raise ValueError('Only singleton mainboard swaps are supported.')
+                    if any(key(c['name'])==key(add) for c in active):
+                        raise ValueError('The addition is already in the active deck.')
+                    commanders=[c for c in active if c['zone']=='commander']
+                    if len(commanders)!=1 or not isinstance(commanders[0].get('color_identity'),list):
+                        raise ValueError('Commander identity must be resolved before remote editing.')
+                    if not isinstance(mcp_swap_card.get('color_identity'),list):
+                        raise ValueError('Addition color identity is not resolved.')
+                    if not set(mcp_swap_card['color_identity']).issubset(set(commanders[0]['color_identity'])):
+                        raise ValueError('Addition is outside the commander color identity.')
+                    if (mcp_swap_card.get('legalities') or {}).get('commander')!='legal':
+                        raise ValueError('Commander legality must be confirmed as legal.')
+                    if availability(state,add,deck['id'])['available']<1:
+                        raise ValueError('No available owned copy for the addition.')
+                    count=sum(int(c.get('qty',1)) for c in active)
+                    if count!=100:raise ValueError('Remote swap requires a 100-card deck.')
+                    proposal={'id':uid(),'add':mcp_swap_card['name'],'cut':target['name'],'status':'pending'}
+                    candidate=copy.deepcopy(deck)
+                    before_violations={x['name'] for x in duplicate_violations(candidate)}
+                    apply_swap(state,candidate,proposal,mcp_swap_card)
+                    if sum(int(c.get('qty',1)) for c in candidate['cards']
+                           if c['zone'] in ('main','commander') and (c['zone']=='commander' or
+                           c.get('group') not in set((candidate.get('swap_categories') or
+                           {'in':'Swap In','out':'Swap Out'}).values())))!=100:
+                        raise ValueError('Swap would change the 100-card deck count.')
+                    after_violations={x['name'] for x in duplicate_violations(candidate)}
+                    if after_violations-before_violations:
+                        raise ValueError('Swap creates a Commander singleton violation.')
+                    summary={'deck_id':deck['id'],'deck_name':deck['name'],'add':mcp_swap_card['name'],
+                             'cut':target['name'],'deck_sha':deck_sha,'mainboard_count':100}
+                    if payload['action']=='preview':
+                        return self.send_json({'ok':True,'status':'preview','saved':False,**summary})
+                    if payload.get('confirm') is not True:
+                        raise ValueError('Explicit approval is required to apply the swap.')
+                    if payload.get('expected_deck_sha')!=deck_sha:
+                        raise ValueError('Deck changed since preview; preview again.')
+                    backups=DATA/'mcp-backups';backups.mkdir(parents=True,exist_ok=True)
+                    destination=backups/('before-deck-swap-'+datetime.datetime.now(
+                        datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')+
+                        '-'+secrets.token_hex(4)+'.sqlite3')
+                    try:
+                        with db() as source,sqlite3.connect(destination) as target_db:
+                            source.backup(target_db)
+                        deck['cards']=candidate['cards']
+                        deck['history']=candidate['history']
+                        write_state(state)
+                    except Exception:
+                        if destination.exists():destination.unlink()
+                        raise
+                    verified=deck_of(read_state(),deck['id'])
+                    if not any(c['zone']=='main' and key(c['name'])==key(add) for c in verified['cards']):
+                        raise ValueError('Deck verification failed after saving.')
+                    return self.send_json({'ok':True,'status':'applied','saved':True,
+                                           'backup_created':True,'verified':True,**summary})
                 if path=='/api/mcp-collection-import':
                     # Only the private local bridge can invoke this route with the
                     # existing loopback mutation token. No remote HTTP listener.
