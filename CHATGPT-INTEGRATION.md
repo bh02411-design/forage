@@ -10,7 +10,9 @@ This is **not** a replacement for the Forage chat interface and is **not** an Op
 - `get_deck` — read the mainboard, Considering board or complete deck, including card roles and Oracle metadata stored in Forage.
 - `search_collection` — search and page through the owned collection with available/assigned copy counts.
 - `card_availability` — check owned copies and assignments across all imported decks.
-- `propose_swap` — **read-only preview** of an addition and cut, including ownership, Commander legality if known, and color-identity warnings. It does **not** save or apply a change.
+- `propose_swap` — **read-only advisory preview** of an addition and cut. It does **not** save or apply a change.
+- `preview_deck_swap` — **strict read-only preview** against the local app, checking 100-card count, ownership, commander legality and color identity, protected cuts, duplicate names, and returning a SHA-256 of the current deck.
+- `apply_deck_swap` — write-enabled one-for-one swap, requiring user approval and the exact preview deck SHA. Verifies the current deck has not changed, saves a local SQLite backup, preserves existing custom categories/history, and checks the final deck.
 
 The bridge also offers opt-in local write capabilities after this release is installed:
 
@@ -20,9 +22,9 @@ The bridge also offers opt-in local write capabilities after this release is ins
 
 The write tools are still accessible **only through the private stdio MCP tunnel**. The bridge uses Forage's existing local browser mutation token internally via loopback HTTP; it never sends that token back to ChatGPT or includes it in MCP results. It does not open a public port. Neither a preview nor a request to save a version grants blanket approval for collection replacement. Do not call `apply_collection_import` without approval for the specific import.
 
-**Deployment:** Update Forage to a version that contains the new `/api/mcp-collection-import` route; replace any standalone copy of `mcp_bridge.py` used by your tunnel; restart the tunnel and refresh tool discovery. No live data is included in the GitHub release. If your custom MCP plugin caches the old tool set, refresh/reconnect it. Collection import text must fit Forage's 12 MiB POST limit.
+**Deployment:** Update Forage to a version that contains the new `/api/mcp-collection-import` and `/api/mcp-deck-swap` routes; replace any standalone copy of `mcp_bridge.py` used by your tunnel; restart the tunnel and refresh tool discovery. No live data is included in the GitHub release. If your custom MCP plugin caches the old tool set, refresh/reconnect it. Collection import text must fit Forage's 12 MiB POST limit.
 
-Other write actions (direct swaps, card additions/removals, sleeve tags, restores) are **not yet exposed**. Continue using Forage's local UI for those operations until separately reviewed and tested.
+Other write actions (separate add/remove operations, sleeve tags, restores) are **not yet exposed**. Continue using Forage's local UI for those operations until separately reviewed and tested.
 
 ## Start locally
 
@@ -60,4 +62,4 @@ Custom MCP creation and private tunnel entitlements vary by ChatGPT account/work
 - Access remains available while Forage and your MCP tunnel are running. If either stops, ChatGPT cannot read live data.
 - The bridge only checks whatever collection you imported; physical ownership and the legality metadata may be incomplete.
 - `propose_swap` checks one-for-one changes, not whole-deck consistency, replacement category or full Commander legality. It intentionally provides advisory results rather than applying changes.
-- Other automated edits should follow with their own scope, explicit confirmations, current-deck version checks, and backup/undo. The current collection import checks the collection hash at apply time and backs up the entire database.
+- Other automated edits should follow with their own scope, explicit confirmations, current-deck version checks, and backup/undo. The current collection import checks the collection hash at apply time and backs up the entire database. Deck swaps use the same backup approach and enforce a fresh deck hash.
