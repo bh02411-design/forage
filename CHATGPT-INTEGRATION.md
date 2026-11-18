@@ -1,6 +1,6 @@
-# Connect Forage to ChatGPT (private preview)
+# Connect Forage to ChatGPT (private bridge)
 
-Forage now includes an **optional, read-only Model Context Protocol (MCP) bridge** in `mcp_bridge.py`. It gives ChatGPT access to decklists and owned collection cards without sending them to GitHub or turning the local Forage app into a public service.
+Forage now includes an **optional Model Context Protocol (MCP) bridge** in `mcp_bridge.py`. It gives ChatGPT access to decklists and owned collection cards without sending them to GitHub or turning the local Forage app into a public service.
 
 This is **not** a replacement for the Forage chat interface and is **not** an OpenAI API integration. Your existing LM Studio settings remain unchanged. The bridge performs no AI inference and does not require paying for OpenAI model API calls. A Secure MCP Tunnel may require separate platform access and permissions.
 
@@ -12,7 +12,17 @@ This is **not** a replacement for the Forage chat interface and is **not** an Op
 - `card_availability` — check owned copies and assignments across all imported decks.
 - `propose_swap` — **read-only preview** of an addition and cut, including ownership, Commander legality if known, and color-identity warnings. It does **not** save or apply a change.
 
-All exposed actions are read-only. No ChatGPT tool can import, delete, update or otherwise mutate your workspace in this version. This is intentional until end-to-end authentication and access are verified.
+The bridge also offers opt-in local write capabilities after this release is installed:
+
+- `preview_collection_import` parses a complete Forage text import and returns existing/incoming quantities plus SHA-256 values without making any changes.
+- `apply_collection_import` replaces the **entire** collection only after an explicit user confirmation and the exact matching preview hashes. The server rejects stale previews if the collection or import text changed. It saves a full SQLite backup under `data/mcp-backups/` before replacement. Existing deck lists and assignments are not rewritten.
+- `create_deck_version` saves a named deck snapshot in the existing local saved-version database.
+
+The write tools are still accessible **only through the private stdio MCP tunnel**. The bridge uses Forage's existing local browser mutation token internally via loopback HTTP; it never sends that token back to ChatGPT or includes it in MCP results. It does not open a public port. Neither a preview nor a request to save a version grants blanket approval for collection replacement. Do not call `apply_collection_import` without approval for the specific import.
+
+**Deployment:** Update Forage to a version that contains the new `/api/mcp-collection-import` route; replace any standalone copy of `mcp_bridge.py` used by your tunnel; restart the tunnel and refresh tool discovery. No live data is included in the GitHub release. If your custom MCP plugin caches the old tool set, refresh/reconnect it. Collection import text must fit Forage's 12 MiB POST limit.
+
+Other write actions (direct swaps, card additions/removals, sleeve tags, restores) are **not yet exposed**. Continue using Forage's local UI for those operations until separately reviewed and tested.
 
 ## Start locally
 
@@ -50,4 +60,4 @@ Custom MCP creation and private tunnel entitlements vary by ChatGPT account/work
 - Access remains available while Forage and your MCP tunnel are running. If either stops, ChatGPT cannot read live data.
 - The bridge only checks whatever collection you imported; physical ownership and the legality metadata may be incomplete.
 - `propose_swap` checks one-for-one changes, not whole-deck consistency, replacement category or full Commander legality. It intentionally provides advisory results rather than applying changes.
-- Full automated edits should come later, behind explicit confirmation, current-deck version checks, backup/undo, and stronger user-specific authorization.
+- Other automated edits should follow with their own scope, explicit confirmations, current-deck version checks, and backup/undo. The current collection import checks the collection hash at apply time and backs up the entire database.
