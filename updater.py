@@ -11,6 +11,7 @@ MAX_PACKAGE=20*1024*1024
 
 # Release notes stay in an existing updater file so older installers accept the package.
 CHANGELOG={
+ '0.2.46':['Add private ChatGPT MCP collection import previews and confirmed replacements with local SQLite backup.','Require exact SHA-256 match of import text and current collection before applying; preserve existing deck lists.','Enable named deck snapshots over the existing secure MCP bridge after a tunnel restart.'],
  '0.2.45':['Add named saved versions inside each deck without creating duplicate decks.','Store snapshots separately from active workspace data and load their metadata only when opened to preserve responsiveness.','Support reversible version restores, up to 100 versions per deck, and complete backup/restore of saved snapshots.'],
  '0.2.44':['Remove the redundant in-app LM Studio chatbot panel to give deck management the full workspace width.','Keep existing chat history in local workspace/backups and preserve collection management, card drops, pending decisions, and land-drop tools.','Keep optional local vision model settings for card image recognition; ChatGPT integration remains a separate MCP bridge.'],
  '0.2.43':['Reduce the ChatGPT MCP workspace payload with a local-only filtered read endpoint.','Avoid the bridge 12 MB full-workspace failure when using an updated bridge script; replacement of the separate bridge script is still required.','Keep browser access tokens, chat history, memories and settings out of the MCP snapshot.'],

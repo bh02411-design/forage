@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Forage: local-only deck workspace. Python 3.10+, standard library only."""
-import argparse, base64, copy, datetime, html, json, os, re, secrets, sqlite3, threading, time, urllib.error, urllib.parse, urllib.request, webbrowser
+import argparse, base64, copy, datetime, hashlib, html, json, os, re, secrets, sqlite3, threading, time, urllib.error, urllib.parse, urllib.request, webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from core import basic_land_plan, apply_basic_land_plan, swap_category_names, auto_category_candidate, remove_selected_cards, auto_categorize_card, uid, key, parse_import, make_entry, analysis, duplicate_violations, availability, mana_sample, apply_swap, category_names, normalize_category_changes, apply_category_changes, normalize_workspace_changes, apply_workspace_plan
@@ -847,6 +847,52 @@ class Handler(BaseHTTPRequestHandler):
                 resolved=lookup(p['add'])
             with LOCK:
                 state=read_state(); deck=deck_of(state,payload.get('deck',state['active']))
+                if path=='/api/mcp-collection-import':
+                    # Only the private local bridge can invoke this route with the
+                    # existing loopback mutation token. No remote HTTP listener.
+                    if payload.get('action') not in ('preview','apply'):
+                        raise ValueError('Expected preview or apply.')
+                    raw=payload.get('text')
+                    if not isinstance(raw,str) or not raw.strip():
+                        raise ValueError('Collection import text is required.')
+                    cards,warnings=parse_import(raw)
+                    if not cards:
+                        raise ValueError('Import contains no valid cards.')
+                    current=hashlib.sha256(json.dumps(state.get('collection',[]),sort_keys=True,
+                                       separators=(',',':')).encode()).hexdigest()
+                    incoming=hashlib.sha256(raw.encode()).hexdigest()
+                    summary={'current_collection_sha':current,'import_sha':incoming,
+                             'existing_entries':len(state.get('collection',[])),
+                             'existing_copies':sum(int(c.get('qty',1)) for c in state.get('collection',[])),
+                             'incoming_entries':len(cards),
+                             'incoming_copies':sum(int(c.get('qty',1)) for c in cards),
+                             'warnings':warnings[:50]}
+                    if payload['action']=='preview':
+                        return self.send_json({'ok':True,'status':'preview','saved':False,**summary})
+                    if payload.get('confirm') is not True:
+                        raise ValueError('Explicit confirmation is required to replace the collection.')
+                    if payload.get('expected_collection_sha')!=current or payload.get('expected_import_sha')!=incoming:
+                        raise ValueError('Collection or import changed since preview; preview again.')
+                    # Back up the whole SQLite database, including saved versions,
+                    # before altering the collection. Never return its local path.
+                    backups=DATA/'mcp-backups'
+                    backups.mkdir(parents=True,exist_ok=True)
+                    filename='before-collection-import-'+datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-'+secrets.token_hex(4)+'.sqlite3'
+                    destination=backups/filename
+                    try:
+                        with db() as source, sqlite3.connect(destination) as target:
+                            source.backup(target)
+                        state['collection']=cards
+                        state['collection_source']='Imported via private MCP '+datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+                        write_state(state)
+                    except Exception:
+                        if destination.exists(): destination.unlink()
+                        raise
+                    return self.send_json({'ok':True,'status':'applied','saved':True,
+                                           'backup_created':True,
+                                           'incoming_entries':len(cards),
+                                           'incoming_copies':summary['incoming_copies'],
+                                           'warnings':warnings[:50]})
                 if path=='/api/settings':
                     settings={**state['settings'],**{k:payload[k] for k in ['lm_url','model','collection_only'] if k in payload}}
                     probe=copy.deepcopy(state); probe['settings']=settings; lm_config(probe); state['settings']=settings
