@@ -290,7 +290,7 @@ def install_update(args, state):
     if args.get("confirm") is not True:
         raise ValueError("Explicit user approval is required to stage an update.")
     version = args.get("expected_version")
-    if not isinstance(version, str) or not re.fullmatch(r"\\d+\\.\\d+\\.\\d+", version):
+    if not isinstance(version, str) or not re.fullmatch(r"\d+\.\d+\.\d+", version):
         raise ValueError("Use the exact version from a fresh update check.")
     return local_mutation("/api/mcp-updates", {
         "action": "stage", "expected_version": version, "confirm": True})
@@ -301,7 +301,7 @@ def restart_forage(args, state):
     if args.get("confirm") is not True:
         raise ValueError("Explicit user approval is required to restart Forage.")
     version = args.get("expected_version")
-    if not isinstance(version, str) or not re.fullmatch(r"\\d+\\.\\d+\\.\\d+", version):
+    if not isinstance(version, str) or not re.fullmatch(r"\d+\.\d+\.\d+", version):
         raise ValueError("Specify the approved staged version.")
     return local_mutation("/api/mcp-updates", {
         "action": "restart", "expected_version": version, "confirm": True})
