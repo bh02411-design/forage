@@ -759,7 +759,7 @@ class Handler(BaseHTTPRequestHandler):
                     if payload.get('confirm') is not True:
                         raise ValueError('Explicit user approval is required to stage an update.')
                     expected=payload.get('expected_version')
-                    if not isinstance(expected,str) or not re.fullmatch(r'\\d+\\.\\d+\\.\\d+',expected):
+                    if not isinstance(expected,str) or not re.fullmatch(r'\d+\.\d+\.\d+',expected):
                         raise ValueError('Use the exact version from a fresh update check.')
                     with updater.UPDATE_LOCK:
                         latest=updater.check(ROOT,DATA)
@@ -771,7 +771,7 @@ class Handler(BaseHTTPRequestHandler):
                     if payload.get('confirm') is not True:
                         raise ValueError('Explicit user approval is required to restart Forage.')
                     expected=payload.get('expected_version')
-                    if not isinstance(expected,str) or not re.fullmatch(r'\\d+\\.\\d+\\.\\d+',expected):
+                    if not isinstance(expected,str) or not re.fullmatch(r'\d+\.\d+\.\d+',expected):
                         raise ValueError('Specify the exact staged update version.')
                     if os.environ.get('FORAGE_LAUNCHER')!='1':
                         raise ValueError('Forage must run from its launcher for safe restart.')
