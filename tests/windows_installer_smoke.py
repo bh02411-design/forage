@@ -15,6 +15,10 @@ def main():
         assert not (app/'data').exists()
         checks="import ssl,sqlite3,ctypes,server,updater,seed;assert not seed.initial_state()['collection'];assert updater.config('nonexistent')['repository']=='bh02411-design/forage';print('Bundled imports and clean starter verified')"
         subprocess.run([str(python),'-c',checks],cwd=root,check=True,timeout=30)
+        discovery=subprocess.run([str(python),str(app/'mcp_bridge.py')],cwd=root,check=True,timeout=15,
+                                 input='{"jsonrpc":"2.0","id":1,"method":"tools/list"}\n',
+                                 capture_output=True,text=True)
+        assert len(json.loads(discovery.stdout)['result']['tools'])==14
         process=subprocess.Popen([str(app/'runtime'/'pythonw.exe'),str(app/'launcher.py'),'--tray','--data-dir',str(data),'--port','18765'],cwd=root)
         base='http://127.0.0.1:18765'
         try:

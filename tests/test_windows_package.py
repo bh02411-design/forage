@@ -17,11 +17,12 @@ class WindowsPackageTests(unittest.TestCase):
         payload=buffer.getvalue()
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);source=root/'source';source.mkdir()
-            for name in updater.PROGRAM_FILES:
+            for name in updater.PROGRAM_FILES | {'mcp_bridge.py'}:
                 path=source/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text('fixture')
             (source/'private-collection.csv').write_text('never package me')
             archive=root/'runtime.zip';archive.write_bytes(payload)
             with patch.object(build_windows,'PYTHON_SHA256',hashlib.sha256(payload).hexdigest()):out=build_windows.stage(source,root/'stage',archive)
+            self.assertTrue((out/'mcp_bridge.py').is_file())
             self.assertFalse((out/'private-collection.csv').exists());self.assertFalse((out/'data').exists())
             self.assertTrue((out/'runtime'/'LICENSE.txt').exists());self.assertIn('..\n',(out/'runtime'/'python313._pth').read_text())
             self.assertEqual((out/'Forage.ico').read_bytes()[:6],b'\x00\x00\x01\x00\x01\x00')
