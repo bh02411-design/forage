@@ -16,6 +16,9 @@ UPDATE_EXIT=0
 ACTIVE_WRITES=0
 REQUEST_LOCK=threading.RLock()
 TOKEN=secrets.token_urlsafe(32)
+MCP_TOKEN=secrets.token_urlsafe(32)
+MCP_TOKEN_PATHS=frozenset(('/api/mcp-updates','/api/mcp-deck-swap',
+                           '/api/mcp-collection-import','/api/save-deck-version'))
 LOCK=threading.RLock(); API_LOCK=threading.Lock(); LAST_CALL=0
 
 def categorize_board_card(state,deck,card,known=None,include_manual=False):
@@ -651,6 +654,10 @@ class Handler(BaseHTTPRequestHandler):
     def valid_host(self):
         host=self.headers.get('Host','').split(':')[0]
         return host in ['127.0.0.1','localhost']
+    def valid_mcp_client(self):
+        return (self.client_address[0] == '127.0.0.1' and self.valid_host()
+                and self.headers.get('X-Forage-MCP') == '1'
+                and 'Origin' not in self.headers and 'Sec-Fetch-Site' not in self.headers)
     def do_GET(self):
         if not self.valid_host(): return self.send_json({'error':'Loopback Host required.'},403)
         path=urllib.parse.urlsplit(self.path).path
@@ -663,6 +670,10 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/api/updates/history':
             try:return self.send_json(updater.release_history(ROOT,DATA))
             except Exception as exc:return self.send_json({'error':str(exc)},400)
+        if path=='/api/mcp-auth':
+            if not self.valid_mcp_client():
+                return self.send_json({'error':'Local MCP client required.'},403)
+            return self.send_json({'token':MCP_TOKEN})
         if path=='/api/mcp-state':
             # Local-only, read-only snapshot for the ChatGPT bridge. Never return
             # the browser mutation token, chat, history, memories or settings.
@@ -721,9 +732,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def handle_post(self):
         global UPDATE_EXIT
-        if not self.valid_host() or self.headers.get('X-Forage-Token')!=TOKEN: return self.send_json({'error':'Reload the local app before making changes.'},403)
+        path=urllib.parse.urlsplit(self.path).path
+        browser_ok=self.valid_host() and self.headers.get('X-Forage-Token')==TOKEN
+        mcp_token=self.headers.get('X-Forage-MCP-Token','')
+        mcp_ok=(path in MCP_TOKEN_PATHS and self.valid_mcp_client()
+                and mcp_token.isascii() and secrets.compare_digest(mcp_token,MCP_TOKEN))
+        if not (browser_ok or mcp_ok):
+            return self.send_json({'error':'Reload the local app before making changes.'},403)
         try:
-            path=urllib.parse.urlsplit(self.path).path
             length=int(self.headers.get('Content-Length',0))
             max_mb=128 if path=='/api/restore' else 12
             if not 0<length<max_mb*1024*1024: raise ValueError('Request too large (maximum '+str(max_mb)+' MB).')
@@ -746,7 +762,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({'ok':True,'status':'tray_starting' if action=='configure' else 'quitting'})
                 threading.Thread(target=self.server.shutdown,daemon=True).start();return
             if path=='/api/mcp-updates':
-                # Private bridge uses the existing loopback mutation token.
+                # The bridge uses a scoped loopback token.
                 # Only the trusted configured release source is accepted.
                 action=payload.get('action')
                 if action=='check':

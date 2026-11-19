@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Private, read-only MCP bridge for an already-running local Forage.
+"""Private MCP bridge for an already-running local Forage.
 
 Run through a Secure MCP Tunnel using stdio. Never expose Forage's local
 HTTP endpoint on a public interface. No OpenAI API key or model is required.
@@ -13,6 +13,8 @@ import sys
 MIB = 1024 * 1024
 DEFAULT_WORKSPACE_MIB = 64
 MAX_WORKSPACE_MIB = 128
+AUTH_MAX_BYTES = 1024
+MCP_HEADERS = {"Accept": "application/json", "X-Forage-MCP": "1"}
 PROTOCOL_VERSION = "2025-06-18"
 
 
@@ -211,27 +213,30 @@ def propose_swap(args, state):
 
 
 def local_mutation(path, payload):
-    """Use Forage's loopback-only browser token without ever exposing it to MCP."""
+    """Get a scoped loopback token without loading the workspace."""
     port = integer(os.environ.get("FORAGE_PORT", "8765"), 8765, 1, 65535)
     connection = http.client.HTTPConnection("127.0.0.1", port, timeout=180 if path == "/api/mcp-updates" and payload.get("action") == "stage" else 15)
     try:
-        connection.request("GET", "/api/state", headers={"Accept": "application/json"})
+        connection.request("GET", "/api/mcp-auth", headers=MCP_HEADERS)
         with connection.getresponse() as response:
+            if response.status == 404:
+                raise ValueError("Update the local Forage application to v0.2.48 or later for MCP authorization.")
             if response.status != 200:
-                raise ValueError("Cannot authorize local Forage write.")
-            raw = response.read(MAX_WORKSPACE_MIB * MIB + 1)
-            if len(raw) > MAX_WORKSPACE_MIB * MIB:
-                raise ValueError("Forage workspace exceeds write authorization limit.")
-        token = json.loads(raw).get("token")
+                raise ValueError("Cannot authorize local Forage MCP request.")
+            raw = response.read(AUTH_MAX_BYTES + 1)
+            if len(raw) > AUTH_MAX_BYTES:
+                raise ValueError("Forage MCP authorization response is unexpectedly large.")
+        authorization = json.loads(raw)
+        token = authorization.get("token") if isinstance(authorization, dict) else None
         if not isinstance(token, str) or not token:
-            raise ValueError("Forage write authorization is unavailable.")
+            raise ValueError("Forage MCP authorization is unavailable.")
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         if len(body) >= 12 * MIB:
             raise ValueError("Collection import exceeds Forage's 12 MiB request limit.")
         connection.request("POST", path, body=body,
-                           headers={"Accept": "application/json",
+                           headers={**MCP_HEADERS,
                                     "Content-Type": "application/json",
-                                    "X-Forage-Token": token})
+                                    "X-Forage-MCP-Token": token})
         with connection.getresponse() as response:
             status = response.status
             raw = response.read(MIB + 1)
@@ -440,13 +445,18 @@ HANDLERS = {
 }
 
 
+WORKSPACE_TOOLS = frozenset(("list_decks", "get_deck", "search_collection",
+                             "card_availability", "propose_swap", "preview_deck_swap",
+                             "apply_deck_swap", "create_deck_version"))
+
+
 def dispatch(message):
     method = message.get("method")
     params = message.get("params") or {}
     if method == "initialize":
         return {"protocolVersion": PROTOCOL_VERSION,
                 "capabilities": {"tools": {"listChanged": False}},
-                "serverInfo": {"name": "forage-private", "version": "0.1.0"}}
+                "serverInfo": {"name": "forage-private", "version": "0.2.48"}}
     if method == "ping":
         return {}
     if method == "tools/list":
@@ -458,7 +468,8 @@ def dispatch(message):
         args = params.get("arguments") or {}
         if not isinstance(args, dict):
             raise ValueError("Tool arguments must be an object")
-        result = HANDLERS[name](args, read_workspace())
+        state = read_workspace() if name in WORKSPACE_TOOLS else None
+        result = HANDLERS[name](args, state)
         return {"content": [{"type": "text", "text": json.dumps(result, ensure_ascii=False)}]}
     raise KeyError(method)
 

@@ -59,7 +59,7 @@ def stage(root,output,runtime_archive=None):
             if not target.is_relative_to(runtime.resolve()):raise ValueError('Invalid runtime archive path.')
         archive.extractall(runtime)
     (runtime/'python313._pth').write_text('python313.zip\n.\n..\nimport site\n',encoding='utf-8')
-    for name in sorted(updater.PROGRAM_FILES):
+    for name in sorted(updater.PROGRAM_FILES | {'mcp_bridge.py'}):
         destination=output/name;destination.parent.mkdir(parents=True,exist_ok=True)
         shutil.copy2(root/name,destination)
     (output/'Getting-started.txt').write_text(GUIDE,encoding='utf-8')
