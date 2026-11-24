@@ -346,6 +346,31 @@ def create_deck_version(args, state):
             "version_name": name.strip(), "result": result}
 
 
+
+def create_deck(args, state):
+    if args.get("confirm") is not True:
+        raise ValueError("Explicit approval is required to create a deck.")
+    return local_mutation("/api/mcp-deck-import", {"action":"create",
+        "name":args.get("name"),"commander":args.get("commander"),"confirm":True})
+
+
+def preview_deck_import(args, state):
+    return local_mutation("/api/mcp-deck-import", {"action":"preview",
+        "deck":args.get("deck_id"),"text":args.get("text")})
+
+
+def apply_deck_import(args, state):
+    if args.get("confirm") is not True:
+        raise ValueError("Explicit approval is required to replace the selected deck.")
+    for field in ("expected_workspace_sha","expected_import_sha"):
+        if not isinstance(args.get(field),str) or not re.fullmatch(r"[a-f0-9]{64}",args[field]):
+            raise ValueError("Use exact SHA-256 values from a fresh preview.")
+    return local_mutation("/api/mcp-deck-import", {"action":"apply",
+        "deck":args.get("deck_id"),"text":args.get("text"),"confirm":True,
+        "expected_workspace_sha":args["expected_workspace_sha"],
+        "expected_import_sha":args["expected_import_sha"]})
+
+
 TOOLS = [
     {"name": "list_decks", "description": "List local Forage decks, deck IDs, and mainboard counts.",
      "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False}},
@@ -420,14 +445,96 @@ TOOLS = [
          "name": {"type": "string", "maxLength": 120}},
          "required": ["name"], "additionalProperties": False}}
 ]
+TOOLS.extend([
+  {
+    "name": "create_deck",
+    "description": "WRITE: Create a new named deck with one owned legal commander. Requires explicit approval. Backs up local database.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "commander": {
+          "type": "string"
+        },
+        "confirm": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "commander",
+        "confirm"
+      ],
+      "additionalProperties": False
+    }
+  },
+  {
+    "name": "preview_deck_import",
+    "description": "Read-only: Validate a complete 100-card list against owned available copies, color identity, legality and copy limits. Use Commander and Mainboard headings and quantity + card name per line. Requires explicit target deck ID.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "deck_id": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "deck_id",
+        "text"
+      ],
+      "additionalProperties": False
+    }
+  },
+  {
+    "name": "apply_deck_import",
+    "description": "WRITE: Replace only the specified deck with the previewed 100-card list. Requires explicit approval and exact fresh workspace and import hashes. Creates a local SQLite backup.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "deck_id": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "expected_workspace_sha": {
+          "type": "string"
+        },
+        "expected_import_sha": {
+          "type": "string"
+        },
+        "confirm": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "deck_id",
+        "text",
+        "expected_workspace_sha",
+        "expected_import_sha",
+        "confirm"
+      ],
+      "additionalProperties": False
+    }
+  }
+])
 for item in TOOLS:
     item["annotations"] = {"readOnlyHint": item["name"] not in (
         "apply_collection_import", "create_deck_version", "apply_deck_swap",
-        "install_update", "restart_forage"),
-        "destructiveHint": item["name"] == "apply_collection_import",
+        "install_update", "restart_forage", "create_deck", "apply_deck_import"),
+        "destructiveHint": item["name"] in ("apply_collection_import", "apply_deck_import"),
         "openWorldHint": False}
 
 HANDLERS = {
+    "create_deck": create_deck,
+    "preview_deck_import": preview_deck_import,
+    "apply_deck_import": apply_deck_import,
     "list_decks": list_decks,
     "get_deck": get_deck,
     "search_collection": search_collection,
@@ -456,7 +563,7 @@ def dispatch(message):
     if method == "initialize":
         return {"protocolVersion": PROTOCOL_VERSION,
                 "capabilities": {"tools": {"listChanged": False}},
-                "serverInfo": {"name": "forage-private", "version": "0.2.48"}}
+                "serverInfo": {"name": "forage-private", "version": "0.2.49"}}
     if method == "ping":
         return {}
     if method == "tools/list":
