@@ -18,8 +18,113 @@ REQUEST_LOCK=threading.RLock()
 TOKEN=secrets.token_urlsafe(32)
 MCP_TOKEN=secrets.token_urlsafe(32)
 MCP_TOKEN_PATHS=frozenset(('/api/mcp-updates','/api/mcp-deck-swap',
-                           '/api/mcp-collection-import','/api/save-deck-version'))
+                           '/api/mcp-collection-import','/api/save-deck-version','/api/mcp-deck-import'))
 LOCK=threading.RLock(); API_LOCK=threading.Lock(); LAST_CALL=0
+
+
+def mcp_deck_import(state, payload):
+    """Validate against local resolved collection metadata, under LOCK."""
+    action=payload.get('action')
+    if action not in ('create','preview','apply'):
+        raise ValueError('Expected create, preview or apply.')
+    def resolve(name, qty, zone, excluded=None):
+        if not isinstance(name,str) or not name.strip() or len(name)>180:
+            raise ValueError('Invalid card name.')
+        if type(qty) is not int or not 1<=qty<=100:
+            raise ValueError('Invalid card quantity.')
+        matches=[c for c in state['collection'] if c['name'].casefold()==name.strip().casefold()]
+        if not matches:raise ValueError('Not in collection: '+name)
+        card=next((c for c in matches if isinstance(c.get('color_identity'),list)
+                   and (c.get('legalities') or {}).get('commander')=='legal'
+                   and c.get('type_line')),None)
+        if card is None:raise ValueError('Resolve legal card metadata first: '+name)
+        if availability(state,card['name'],excluded)['available']<qty:
+            raise ValueError('Insufficient available copies: '+name)
+        result=copy.deepcopy(card)
+        result.update(id=uid(),qty=qty,zone=zone,group='Commander' if zone=='commander' else 'Uncategorized',protected=False)
+        return result
+    def commander(name, excluded=None):
+        card=resolve(name,1,'commander',excluded)
+        # Conservative single-commander support; special noncreature commanders
+        # must have explicit permission in their resolved Oracle text.
+        typ=card['type_line'].split(' // ')[0]
+        if not ('Legendary' in typ and 'Creature' in typ or
+                re.search(r'can be your commander\\b',card.get('oracle_text') or '',re.I)):
+            raise ValueError('Card is not an eligible single commander.')
+        return card
+    def digest(obj):
+        return hashlib.sha256(json.dumps(obj,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    def save():
+        backups=DATA/'mcp-backups'
+        backups.mkdir(parents=True,exist_ok=True)
+        destination=backups/('before-deck-import-'+secrets.token_hex(12)+'.sqlite3')
+        with db() as source,sqlite3.connect(destination) as target:
+            source.backup(target)
+        write_state(state)
+    if action=='create':
+        if payload.get('confirm') is not True:raise ValueError('Explicit approval is required.')
+        name=payload.get('name')
+        if not isinstance(name,str) or not name.strip() or len(name)>120:raise ValueError('Invalid deck name.')
+        if any(d['name'].casefold()==name.strip().casefold() for d in state['decks']):
+            raise ValueError('A deck with this name already exists.')
+        card=commander(payload.get('commander'))
+        deck={'id':uid(),'name':name.strip(),'source':'Local MCP deck','cards':[card],
+              'chat':[],'history':[],'proposals':[]}
+        state['decks'].append(deck)
+        save()
+        verified=deck_of(read_state(),deck['id'])
+        return {'ok':True,'saved':True,'backup_created':True,'deck_id':verified['id'],'mainboard_count':1}
+    deck_id=payload.get('deck')
+    if not isinstance(deck_id,str) or not deck_id:raise ValueError('Explicit deck ID required.')
+    deck=deck_of(state,deck_id)
+    if any(c.get('protected') for c in deck['cards']):
+        raise ValueError('Import cannot replace protected cards.')
+    raw=payload.get('text')
+    if not isinstance(raw,str) or not raw.strip() or len(raw)>30000:raise ValueError('Invalid import text.')
+    entries,warnings=parse_import(raw)
+    if warnings:raise ValueError('Import has skipped lines; correct the list.')
+    if any(c['zone'] not in ('main','commander') for c in entries):raise ValueError('Only commander and mainboard are supported.')
+    commanders=[c for c in entries if c['zone']=='commander']
+    if len(commanders)!=1 or commanders[0]['qty']!=1:raise ValueError('Exactly one commander required; use Commander and Mainboard headings.')
+    if sum(c['qty'] for c in entries)!=100:raise ValueError('Commander deck must contain exactly 100 cards.')
+    leader=commander(commanders[0]['name'],deck_id)
+    cards=[leader]
+    for entry in entries:
+        if entry['zone']=='commander':continue
+        card=resolve(entry['name'],entry['qty'],'main',deck_id)
+        if not set(card['color_identity']).issubset(leader['color_identity']):
+            raise ValueError('Outside commander color identity: '+card['name'])
+        cards.append(card)
+    candidate=copy.deepcopy(deck)
+    candidate['cards']=cards
+    if duplicate_violations(candidate):raise ValueError('Commander copy limit violation.')
+    # Check combined quantities, including any commander/mainboard duplicate.
+    totals={}
+    for c in cards:totals[key(c['name'])]=totals.get(key(c['name']),0)+c['qty']
+    for c in cards:
+        if availability(state,c['name'],deck_id)['available']<totals[key(c['name'])]:
+            raise ValueError('Insufficient combined copies: '+c['name'])
+    for c in cards:
+        if c['zone']=='main':categorize_board_card(state,candidate,c)
+    # Include collection and other deck allocations in the preview fingerprint.
+    # Exclude transient updated timestamps, UI selection and generated IDs.
+    workspace_sha=digest({'decks':state['decks'],'collection':state['collection']})
+    import_sha=digest(raw)
+    summary={'deck_id':deck_id,'deck_name':deck['name'],'commander':leader['name'],
+             'mainboard_count':100,'workspace_sha':workspace_sha,'import_sha':import_sha,
+             'replaces_count':sum(c['qty'] for c in deck['cards'])}
+    if action=='preview':return {'ok':True,'saved':False,'status':'preview',**summary}
+    if payload.get('confirm') is not True:raise ValueError('Explicit approval is required.')
+    if payload.get('expected_workspace_sha')!=workspace_sha or payload.get('expected_import_sha')!=import_sha:
+        raise ValueError('Workspace or import changed since preview; preview again.')
+    before=copy.deepcopy(deck['cards'])
+    deck['cards']=candidate['cards']
+    deck['source']='Imported via private MCP'
+    deck.setdefault('history',[]).append({'id':uid(),'type':'import','summary':'Replaced deck via private MCP','before':before})
+    save()
+    verified=deck_of(read_state(),deck_id)
+    if verified['cards']!=candidate['cards']:raise ValueError('Verification failed after saving; backup retained.')
+    return {'ok':True,'saved':True,'status':'applied','backup_created':True,'verified':True,**summary}
 
 def categorize_board_card(state,deck,card,known=None,include_manual=False):
     if card.get('zone') not in ['main','maybe']:return False
@@ -914,7 +1019,11 @@ class Handler(BaseHTTPRequestHandler):
                 state=read_state(); deck=deck_of(state,payload['deck']); p=next(p for p in deck['proposals'] if p['id']==payload['id'])
                 resolved=lookup(p['add'])
             with LOCK:
-                state=read_state(); deck=deck_of(state,payload.get('deck',state['active']))
+                state=read_state()
+                if path=='/api/mcp-deck-import':
+                    if not mcp_ok:return self.send_json({'error':'Private MCP authorization required.'},403)
+                    return self.send_json(mcp_deck_import(state,payload))
+                deck=deck_of(state,payload.get('deck',state['active']))
                 if path=='/api/mcp-deck-swap':
                     # Private bridge only: explicit one-for-one edit, never a bulk deck rewrite.
                     add=payload.get('add');cut=payload.get('cut')
