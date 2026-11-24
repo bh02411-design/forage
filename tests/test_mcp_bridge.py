@@ -82,8 +82,8 @@ class BridgeTests(unittest.TestCase):
         messages = [json.loads(line) for line in output.getvalue().splitlines()]
         self.assertEqual([x["id"] for x in messages], [1, 2, 3])
         self.assertEqual(messages[0]["result"]["serverInfo"]["name"], "forage-private")
-        self.assertEqual(len(messages[1]["result"]["tools"]), 14)
-        self.assertEqual(sum(not tool["annotations"]["readOnlyHint"] for tool in messages[1]["result"]["tools"]), 5)
+        self.assertEqual(len(messages[1]["result"]["tools"]), 17)
+        self.assertEqual(sum(not tool["annotations"]["readOnlyHint"] for tool in messages[1]["result"]["tools"]), 7)
         self.assertNotIn("never-expose-this", output.getvalue())
 
     def test_no_credential_or_arbitrary_url_arguments(self):
@@ -178,6 +178,18 @@ class WriteToolTests(unittest.TestCase):
                 handler({"expected_version": "0.2.47", "confirm": True}, fixture())
                 mutation.assert_called_once_with("/api/mcp-updates", {
                     "action": action, "expected_version": "0.2.47", "confirm": True})
+
+    def test_deck_import_requires_approval_and_hashes(self):
+        with patch.object(bridge, "local_mutation") as mutation:
+            with self.assertRaises(ValueError):
+                bridge.create_deck({"name":"Mog","commander":"Mog"}, None)
+            with self.assertRaises(ValueError):
+                bridge.apply_deck_import({"confirm":True}, None)
+            mutation.assert_not_called()
+        with patch.object(bridge, "local_mutation", return_value={"ok":True}) as mutation:
+            bridge.preview_deck_import({"deck_id":"d","text":"Commander"}, None)
+            mutation.assert_called_once_with("/api/mcp-deck-import",
+                {"action":"preview","deck":"d","text":"Commander"})
 
     def test_tool_annotations(self):
         mapping = {item["name"]: item["annotations"] for item in bridge.TOOLS}
