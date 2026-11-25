@@ -236,18 +236,53 @@ function renderCollection(){
  const cards=matches.slice(0,collectionLimit);
  $('#collection-results').textContent=`${matches.length.toLocaleString()} unique matches · showing ${cards.length}`;
  $('#collection-grid').hidden=collectionMode!=='grid';$('#collection-table-wrap').hidden=collectionMode!=='list';
- $('#collection-grid').innerHTML=cards.map(c=>ForageCards.tile(c,state.collection,'collection',stock(c.name))).join('')||'<div class="empty">Import your collection, or try a different search.</div>';
+ const editButton=c=>`<button class="button secondary" data-edit-owned="${esc(c.name)}" aria-label="Edit owned copies of ${esc(c.name)}">Edit owned</button>`;
+ $('#collection-grid').innerHTML=cards.map(c=>`<div>${ForageCards.tile(c,state.collection,'collection',stock(c.name))}${editButton(c)}</div>`).join('')||'<div class="empty">Add a card, import a list, or try a different search.</div>';
  // For duplicate printing rows, the visual tile carries the first record id but shows the summed quantity.
  bindVisualCards($('#collection-grid'));
- $('#collection-table').innerHTML=cards.map(c=>{const a=stock(c.name);return `<tr><td>${esc(c.name)}</td><td>${a.owned}</td><td>${a.assigned}</td><td>${a.free}</td></tr>`}).join('')||'<tr><td colspan="4" class="empty">No matching cards.</td></tr>';
+ $('#collection-table').innerHTML=cards.map(c=>{const a=stock(c.name);return `<tr><td>${esc(c.name)} ${editButton(c)}</td><td>${a.owned}</td><td>${a.assigned}</td><td>${a.free}</td></tr>`}).join('')||'<tr><td colspan="4" class="empty">No matching cards.</td></tr>';
+ $$('[data-edit-owned]').forEach(b=>b.onclick=()=>collectionCardDialog(b.dataset.editOwned));
  $$('[data-collection-mode]').forEach(b=>b.classList.toggle('selected',b.dataset.collectionMode===collectionMode));
  $('#collection-more').hidden=matches.length<=collectionLimit;
 }
 function renderHistory(){const proposals=deck().proposals.filter(p=>p.status!=='pending');$('#history-list').innerHTML=[...deck().history].reverse().map(h=>`<div class="history-item">${esc(h.summary)}<small>Deck change · undo available in reverse order</small></div>`).join('')+proposals.map(p=>`<div class="history-item">${p.status==='accepted'?'✓ ACCEPTED':'↷ SKIPPED'} · ${esc(p.cut)} → ${esc(p.add)}<small>${esc(p.feedback||p.reason)}</small></div>`).join('')||'<div class="empty">Your decisions will appear here.</div>'}
 function changeView(next){hideCardHover();view=next;$$('.view').forEach(el=>el.hidden=el.id!==next);$$('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===next));}
 async function run(fn){try{await fn()}catch(e){toast(e.message);$$('button:disabled').forEach(b=>b.disabled=false)}}
+async function previewCollectionChange(change){
+ const preview=await api('collection-change',{...change,action:'preview'});
+ const list=preview.changes.map(row=>`<li>${esc(row.name)} · ${row.before} → ${row.after} owned</li>`).join('');
+ modal('Review collection change',`<p>${preview.changed_cards} card name(s) affected. Total owned copies: ${preview.copies_before} → ${preview.copies_after}.</p>
+  <ul>${list}</ul>${preview.changed_cards>preview.changes.length?'<p>Showing the first '+preview.changes.length+' changes.</p>':''}
+  ${preview.warning_count?`<p>${preview.warning_count} import warning(s). ${esc(preview.warnings.join(' '))}</p>`:''}
+  <div class="modal-actions"><button id="apply-owned-change" class="button primary">Apply collection change</button></div>`);
+ $('#apply-owned-change').onclick=event=>run(async()=>{
+  event.currentTarget.disabled=true;
+  await mutate('collection-change',{...change,action:'apply',confirm:true,
+   expected_collection_sha:preview.collection_sha,expected_change_sha:preview.change_sha});
+  closeModal();
+  toast('Collection updated.');
+ });
+}
+function collectionCardDialog(name=''){
+ modal(name?'Edit owned copies':'Add a card',`
+  <label class="field">Card name<input id="owned-card-name" maxlength="180" value="${esc(name)}" ${name?'readonly':'required'}></label>
+  <label class="field">Copies<input id="owned-card-quantity" type="number" min="1" max="100000" step="1" value="1" required></label>
+  <div class="modal-actions"><button class="button primary" data-owned-operation="add">Add copies</button>
+  ${name?'<button class="button secondary" data-owned-operation="decrease">Decrease copies</button><button class="button danger" data-owned-operation="remove">Remove all copies</button>':''}</div>`);
+ $$('[data-owned-operation]').forEach(button=>button.onclick=()=>run(async()=>{
+  const operation=button.dataset.ownedOperation;
+  const change={operation,name:$('#owned-card-name').value};
+  if(operation!=='remove'){
+   const quantity=$('#owned-card-quantity');
+   if(!quantity.reportValidity())return;
+   change.quantity=quantity.valueAsNumber;
+  }
+  button.disabled=true;
+  await previewCollectionChange(change);
+ }));
+}
 function memoryDialog(m={}){modal(m.id?'Edit memory':'Add a memory',`<label class="field">Applies to<select id="memory-scope"><option value="deck" ${m.scope!=='global'?'selected':''}>This deck</option><option value="global" ${m.scope==='global'?'selected':''}>All decks</option></select></label><label class="field">What should Forage remember?<textarea id="memory-text" rows="4">${esc(m.text||'')}</textarea></label><button id="save-memory" class="button primary">Save memory</button>`);$('#save-memory').onclick=()=>run(async()=>{await mutate('memory',{id:m.id,text:$('#memory-text').value,scope:$('#memory-scope').value});closeModal();toast('Memory saved.');});}
-function importDialog(target='deck'){modal(target==='collection'?'Import your collection':'Import a deck',`<p class="modal-note">Paste an Archidekt text export, or choose a CSV/TXT file. Deck imports replace the active list and can be undone. Collection imports replace owned quantities; deck assignments come from imported decks.</p><label class="field">Import into<select id="import-target"><option value="deck" ${target==='deck'?'selected':''}>Active deck</option><option value="collection" ${target==='collection'?'selected':''}>Collection</option></select></label><label class="field">Choose export file<input id="import-file" type="file" accept=".csv,.txt,.tsv"></label><label class="field">Or paste a list<textarea id="import-text" rows="9" placeholder="1 Ygra, Eater of All [Commander]&#10;1 Arcbound Ravager [Sacrifice]&#10;11 Forest [Land]"></textarea></label><p class="modal-note">CSV: Name / Card Name and Quantity / Qty columns. Use category Commander, Mainboard, or Maybeboard to identify boards. Sideboard imports go to Considering.</p><button id="confirm-import" class="button primary">Import list</button>`);$('#import-file').onchange=async e=>{if(e.target.files[0])$('#import-text').value=await e.target.files[0].text()};$('#confirm-import').onclick=()=>run(async()=>{const r=await mutate('import',{text:$('#import-text').value,target:$('#import-target').value});closeModal();toast(r.warnings?.length?'Imported with warnings: '+r.warnings.join(' '):'Import complete.');});}
+function importDialog(target='deck'){modal(target==='collection'?'Append to your collection':'Import a deck',`<p class="modal-note">Paste an Archidekt text export, or choose a CSV/TXT file. Deck imports replace the active list and can be undone. Collection imports add copies to your current inventory.</p><label class="field">Import into<select id="import-target"><option value="deck" ${target==='deck'?'selected':''}>Active deck</option><option value="collection" ${target==='collection'?'selected':''}>Collection</option></select></label><label class="field">Choose export file<input id="import-file" type="file" accept=".csv,.txt,.tsv"></label><label class="field">Or paste a list<textarea id="import-text" rows="9" placeholder="1 Ygra, Eater of All [Commander]&#10;1 Arcbound Ravager [Sacrifice]&#10;11 Forest [Land]"></textarea></label><p class="modal-note">CSV: Name / Card Name and Quantity / Qty columns. Use category Commander, Mainboard, or Maybeboard to identify boards. Sideboard imports go to Considering.</p><button id="confirm-import" class="button primary">Import list</button>`);$('#import-file').onchange=async e=>{if(e.target.files[0])$('#import-text').value=await e.target.files[0].text()};$('#confirm-import').onclick=()=>run(async()=>{const text=$('#import-text').value;const target=$('#import-target').value;if(target==='collection'){await previewCollectionChange({operation:'append',text});return}const r=await mutate('import',{text,target});closeModal();toast(r.warnings?.length?'Imported with warnings: '+r.warnings.join(' '):'Import complete.');});}
 function cardPreview(c,controls=''){const a=available(c.name,true),previewImage=ForageCards.art(c,state.collection);return `<div class="card-detail"><div class="card-detail-art">${previewImage?`<img src="${esc(previewImage)}" alt="${esc(c.name)}">`:'<div class="empty">Card image not loaded</div>'}</div><div class="card-detail-controls"><div class="eyebrow green">${esc(c.mana_cost||'')} · MV ${c.mv??'?'}</div><p>${esc(c.type_line||'Metadata not resolved')}</p><div class="oracle">${esc(c.oracle_text||'Resolve card data to load current text.')}</div><p class="modal-note">${state.collection.length?`${a.owned} owned · ${a.free} available outside other decks`:'Collection not imported; ownership unknown.'}</p>${c.scryfall_uri?`<a href="${esc(safeUrl(c.scryfall_uri))}" target="_blank" rel="noopener noreferrer">Scryfall ↗</a>`:''}${controls}</div></div>`}
 function editCard(id){const c=deck().cards.find(c=>c.id===id);modal(c.name,cardPreview(c,`<div class="field-row"><label class="field">Board<select id="edit-zone"><option value="main" ${c.zone==='main'?'selected':''}>Mainboard</option><option value="commander" ${c.zone==='commander'?'selected':''}>Commander</option><option value="maybe" ${c.zone==='maybe'?'selected':''}>Considering</option></select></label><label class="field">Category<input id="edit-group" value="${esc(c.group)}"></label></div><div class="field-row"><label class="field">Quantity<input id="edit-qty" type="number" min="1" value="${c.qty}"></label><label class="field">Mana value<input id="edit-mv" type="number" min="0" step=".5" value="${c.mv??''}"></label></div><label class="field">Roles (one per line)<textarea id="edit-roles" rows="3">${esc((c.roles||[]).join('\n'))}</textarea></label><label class="field"><input type="checkbox" id="edit-needs-sleeving" ${c.needs_sleeving?'checked':''}>Needs sleeving — add to my physical deck</label><label class="field"><input type="checkbox" id="edit-protected" ${c.protected?'checked':''}>Protect this card from suggested cuts</label><label class="field"><input type="checkbox" id="edit-land" ${c.land?'checked':''}>Land face (exclude from spell curve)</label><label class="field"><input type="checkbox" id="edit-mdfc" ${c.mdfc?'checked':''}>MDFC with a land face</label><div class="modal-actions"><button id="save-card" class="button primary">Save changes</button><button id="resolve-card" class="button secondary">Resolve Scryfall data</button><button id="remove-card" class="quiet">Remove card</button></div><p class="modal-note">${esc(c.meta_source)}</p>`));
  $('#save-card').onclick=()=>run(async()=>{await mutate('card',{id,action:'edit',zone:$('#edit-zone').value,group:$('#edit-group').value,qty:Number($('#edit-qty').value),mv:$('#edit-mv').value===''?null:Number($('#edit-mv').value),roles:$('#edit-roles').value.split('\n').map(s=>s.trim()).filter(Boolean),needs_sleeving:$('#edit-needs-sleeving').checked,protected:$('#edit-protected').checked,land:$('#edit-land').checked,mdfc:$('#edit-mdfc').checked});closeModal();toast('Card updated.');});
@@ -349,7 +384,7 @@ $('#deck-search').oninput=renderDeck;$('#collection-search').oninput=()=>{collec
 $$('[data-zone]').forEach(b=>b.onclick=()=>{zone=b.dataset.zone;$$('[data-zone]').forEach(x=>x.classList.toggle('active',x===b));renderDeck()});
 $('#pending-decisions').onclick=showPendingDecisions;
 $('#settings-open').onclick=settingsDialog;
-$('#import-open').onclick=()=>importDialog(view==='collection'?'collection':'deck');$('#collection-import').onclick=()=>importDialog('collection');$('#lookup-open').onclick=lookupDialog;$('#deck-drop').onclick=lookupDialog;
+$('#import-open').onclick=()=>importDialog(view==='collection'?'collection':'deck');$('#collection-import').onclick=()=>importDialog('collection');$('#collection-add').onclick=()=>collectionCardDialog();$('#lookup-open').onclick=lookupDialog;$('#deck-drop').onclick=lookupDialog;
 $('#add-memory').onclick=()=>memoryDialog();$('#enrich').onclick=()=>run(enrichDeck);
 for(const id of ['undo','history-undo'])$('#'+id).onclick=()=>run(async()=>{await mutate('undo',{});toast('Last deck change undone.');});
 $('#backup').onclick=()=>run(async()=>{const exported=await api('backup');download('forage-backup-'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify(exported,null,2),'application/json');});

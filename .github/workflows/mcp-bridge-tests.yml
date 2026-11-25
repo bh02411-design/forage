@@ -15,4 +15,6 @@ jobs:
       - name: Compile private bridge and server
         run: python -m py_compile mcp_bridge.py server.py
       - name: Run bridge regression suite
-        run: python -m unittest discover -s tests -p 'test_mcp_bridge.py' -v
+        run: |
+          python -m unittest discover -s tests -p 'test_mcp*.py' -v
+          python -m unittest discover -s tests -p 'test_collection_change.py' -v
