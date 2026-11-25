@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Forage: local-only deck workspace. Python 3.10+, standard library only."""
-import argparse, base64, copy, datetime, hashlib, html, json, os, re, secrets, sqlite3, threading, time, urllib.error, urllib.parse, urllib.request, webbrowser
+import argparse, base64, copy, datetime, hashlib, hmac, html, json, os, re, secrets, sqlite3, threading, time, urllib.error, urllib.parse, urllib.request, webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from contextlib import closing, contextmanager
 from pathlib import Path
 from core import basic_land_plan, apply_basic_land_plan, swap_category_names, auto_category_candidate, remove_selected_cards, auto_categorize_card, uid, key, parse_import, make_entry, analysis, duplicate_violations, availability, mana_sample, apply_swap, category_names, normalize_category_changes, apply_category_changes, normalize_workspace_changes, apply_workspace_plan
 from seed import initial_state
+from core import plan_collection_change
 import updater
 import launcher
 from advisor import normalize_cut_response, cut_request, check_cuts, cut_reply, FACT_FIELDS, ABILITIES, intents, catalog, commander_colors, evidence, GUIDANCE, check_recommendations, wants_draw_advice, preference_suggestion, card_facts, mana_value_filter, search_prompt
@@ -18,8 +20,56 @@ REQUEST_LOCK=threading.RLock()
 TOKEN=secrets.token_urlsafe(32)
 MCP_TOKEN=secrets.token_urlsafe(32)
 MCP_TOKEN_PATHS=frozenset(('/api/mcp-updates','/api/mcp-deck-swap',
-                           '/api/mcp-collection-import','/api/save-deck-version','/api/mcp-deck-import'))
+                           '/api/mcp-collection-import','/api/mcp-collection-change',
+                           '/api/save-deck-version','/api/mcp-deck-import'))
 LOCK=threading.RLock(); API_LOCK=threading.Lock(); LAST_CALL=0
+COLLECTION_PREVIEW_KEY=secrets.token_bytes(32)
+
+
+def collection_change(state, payload):
+    """Preview or apply a collection operation while holding LOCK."""
+    action = payload.get('action')
+    if action not in ('preview', 'apply'):
+        raise ValueError('Expected preview or apply.')
+    collection = state['collection']
+    operation = {field: payload[field] for field in ('operation', 'name', 'quantity', 'text')
+                 if field in payload}
+    def digest(value):
+        return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    collection_sha = digest([state.get('collection_revision'), collection])
+    change_sha = hmac.new(COLLECTION_PREVIEW_KEY,
+                          (collection_sha + digest(operation)).encode(), hashlib.sha256).hexdigest()
+    if action == 'apply':
+        if payload.get('confirm') is not True:
+            raise ValueError('Explicit approval is required to change the collection.')
+        if (payload.get('expected_collection_sha') != collection_sha or
+                payload.get('expected_change_sha') != change_sha):
+            raise ValueError('Collection or operation changed since preview. Preview again.')
+    candidate, changes, warnings = plan_collection_change(collection, operation)
+    summary = {'ok': True, 'status': 'preview', 'saved': False,
+               'collection_sha': collection_sha, 'change_sha': change_sha,
+               'changes': changes[:50], 'changed_cards': len(changes),
+               'copies_before': sum(row['qty'] for row in collection),
+               'copies_after': sum(row['qty'] for row in candidate),
+               'warnings': warnings[:50], 'warning_count': len(warnings)}
+    if action == 'preview':
+        return summary
+    backups = DATA / 'mcp-backups'
+    backups.mkdir(parents=True, exist_ok=True)
+    destination = backups / ('before-collection-change-' + secrets.token_hex(12) + '.sqlite3')
+    try:
+        with db() as source, closing(sqlite3.connect(destination)) as target:
+            source.backup(target)
+    except Exception:
+        destination.unlink(missing_ok=True)
+        raise
+    state['collection'] = candidate
+    state['collection_revision'] = secrets.token_hex(16)
+    state['collection_source'] = 'Updated ' + datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+    write_state(state)
+    if read_state()['collection'] != candidate:
+        raise ValueError('Collection verification failed after saving. The backup was retained.')
+    return {**summary, 'status': 'applied', 'saved': True, 'backup_created': True, 'verified': True}
 
 
 def mcp_deck_import(state, payload):
@@ -58,7 +108,7 @@ def mcp_deck_import(state, payload):
         backups=DATA/'mcp-backups'
         backups.mkdir(parents=True,exist_ok=True)
         destination=backups/('before-deck-import-'+secrets.token_hex(12)+'.sqlite3')
-        with db() as source,sqlite3.connect(destination) as target:
+        with db() as source,closing(sqlite3.connect(destination)) as target:
             source.backup(target)
         write_state(state)
     if action=='create':
@@ -177,14 +227,15 @@ def visual_recommendations(state,deck,result):
         rows.append({'id':uid(),'card':copy.deepcopy(card),'reason':str(item.get('reason',''))[:2000],'status':'pending','kind':'match' if item in matches else 'recommendation'})
     return rows
 
+@contextmanager
 def db():
     DATA.mkdir(parents=True,exist_ok=True)
-    con=sqlite3.connect(DATA/'forage.sqlite3',timeout=30)
-    con.execute('CREATE TABLE IF NOT EXISTS workspace (id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL)')
-    con.execute('CREATE TABLE IF NOT EXISTS cache (name TEXT PRIMARY KEY, payload TEXT NOT NULL)')
-    con.execute('CREATE TABLE IF NOT EXISTS deck_versions (id TEXT PRIMARY KEY, deck_id TEXT NOT NULL, name TEXT NOT NULL, created_at TEXT NOT NULL, snapshot TEXT NOT NULL)')
-    con.execute('CREATE INDEX IF NOT EXISTS idx_deck_versions_deck ON deck_versions(deck_id, created_at)')
-    return con
+    with closing(sqlite3.connect(DATA/'forage.sqlite3',timeout=30)) as con, con:
+        con.execute('CREATE TABLE IF NOT EXISTS workspace (id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL)')
+        con.execute('CREATE TABLE IF NOT EXISTS cache (name TEXT PRIMARY KEY, payload TEXT NOT NULL)')
+        con.execute('CREATE TABLE IF NOT EXISTS deck_versions (id TEXT PRIMARY KEY, deck_id TEXT NOT NULL, name TEXT NOT NULL, created_at TEXT NOT NULL, snapshot TEXT NOT NULL)')
+        con.execute('CREATE INDEX IF NOT EXISTS idx_deck_versions_deck ON deck_versions(deck_id, created_at)')
+        yield con
 
 def read_state():
     with db() as c:
@@ -1020,6 +1071,10 @@ class Handler(BaseHTTPRequestHandler):
                 resolved=lookup(p['add'])
             with LOCK:
                 state=read_state()
+                if path in ('/api/collection-change', '/api/mcp-collection-change'):
+                    if path == '/api/mcp-collection-change' and not mcp_ok:
+                        return self.send_json({'error':'Private MCP authorization required.'},403)
+                    return self.send_json(collection_change(state, payload))
                 if path=='/api/mcp-deck-import':
                     if not mcp_ok:return self.send_json({'error':'Private MCP authorization required.'},403)
                     return self.send_json(mcp_deck_import(state,payload))
@@ -1078,7 +1133,7 @@ class Handler(BaseHTTPRequestHandler):
                         datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')+
                         '-'+secrets.token_hex(4)+'.sqlite3')
                     try:
-                        with db() as source,sqlite3.connect(destination) as target_db:
+                        with db() as source,closing(sqlite3.connect(destination)) as target_db:
                             source.backup(target_db)
                         deck['cards']=candidate['cards']
                         deck['history']=candidate['history']
@@ -1124,7 +1179,7 @@ class Handler(BaseHTTPRequestHandler):
                     filename='before-collection-import-'+datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-'+secrets.token_hex(4)+'.sqlite3'
                     destination=backups/filename
                     try:
-                        with db() as source, sqlite3.connect(destination) as target:
+                        with db() as source, closing(sqlite3.connect(destination)) as target:
                             source.backup(target)
                         state['collection']=cards
                         state['collection_source']='Imported via private MCP '+datetime.datetime.now().strftime('%Y-%m-%d %H:%M')

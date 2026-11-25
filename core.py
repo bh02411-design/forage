@@ -53,6 +53,68 @@ def make_entry(name,qty,group='main'):
     land=key(name) in [key(n) for n in ['Forest','Swamp','Plains','Island','Mountain','Wastes','Snow-Covered Forest','Snow-Covered Swamp','Snow-Covered Plains','Snow-Covered Island','Snow-Covered Mountain']]
     return {'id':uid(),'name':name,'qty':qty,'zone':zone,'group':'Land' if land else group if g not in ['main','mainboard'] else 'Uncategorized','roles':['Land'] if land else [],'land':land,'mv':0 if land else None,'mdfc':False,'protected':False,'meta_source':'Imported name; metadata not resolved'}
 
+def plan_collection_change(collection, operation):
+    """Plan an ownership change without modifying the original rows."""
+    rows = copy.deepcopy(collection)
+    by_name = {}
+    for row in rows:
+        by_name.setdefault(key(row['name']), []).append(row)
+    kind = operation.get('operation')
+    warnings = []
+    changes = []
+    emptied = set()
+    if kind == 'append':
+        raw = operation.get('text')
+        if not isinstance(raw, str) or not raw.strip():
+            raise ValueError('Collection import text is required.')
+        entries, warnings = parse_import(raw)
+        incoming = {}
+        for row in entries:
+            identity = key(row['name'])
+            if not identity:
+                raise ValueError('Each imported row needs a card name.')
+            name, quantity = incoming.get(identity, (row['name'], 0))
+            incoming[identity] = (name, quantity + row['qty'])
+        requests = incoming.values()
+    elif kind in ('add', 'decrease', 'remove'):
+        name = operation.get('name')
+        if not isinstance(name, str) or len(name) > 180 or not key(name.strip()) or any(c in name for c in '\r\n\x00'):
+            raise ValueError('Enter a card name of up to 180 characters.')
+        quantity = operation.get('quantity')
+        if kind != 'remove' and (type(quantity) is not int or not 1 <= quantity <= 100000):
+            raise ValueError('Quantity must be a whole number from 1 to 100000.')
+        requests = [(name.strip(), quantity)]
+    else:
+        raise ValueError('Choose add, decrease, remove, or append.')
+
+    for name, quantity in requests:
+        matches = by_name.get(key(name), [])
+        before = sum(row['qty'] for row in matches)
+        if kind in ('add', 'append'):
+            if matches:
+                matches[0]['qty'] += quantity
+            else:
+                rows.append(make_entry(name, quantity))
+            after = before + quantity
+        else:
+            if not matches:
+                raise ValueError('Card is not in the collection.')
+            remaining = before if kind == 'remove' else quantity
+            if remaining > before:
+                raise ValueError('Cannot decrease by more than the owned quantity.')
+            after = before - remaining
+            for row in reversed(matches):
+                if not remaining:
+                    break
+                removed = min(remaining, row['qty'])
+                row['qty'] -= removed
+                remaining -= removed
+                if not row['qty']:
+                    emptied.add(id(row))
+        changes.append({'name': matches[0]['name'] if matches else name,
+                        'before': before, 'after': after})
+    return [row for row in rows if id(row) not in emptied], changes, warnings
+
 def english_card_name(card):
     # Scryfall's name is English even for foreign-language printings.
     return unicodedata.normalize('NFC',str(card.get('english_name') or card.get('name',''))).strip().casefold()

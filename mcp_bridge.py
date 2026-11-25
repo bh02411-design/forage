@@ -346,6 +346,20 @@ def create_deck_version(args, state):
             "version_name": name.strip(), "result": result}
 
 
+def preview_collection_change(args, state):
+    return local_mutation("/api/mcp-collection-change", {**args, "action": "preview"})
+
+
+def apply_collection_change(args, state):
+    if args.get("confirm") is not True:
+        raise ValueError("Explicit user approval is required after showing the preview.")
+    for field in ("expected_collection_sha", "expected_change_sha"):
+        value = args.get(field)
+        if not isinstance(value, str) or not re.fullmatch(r"[a-f0-9]{64}", value):
+            raise ValueError("Use the exact SHA-256 values from a fresh preview.")
+    return local_mutation("/api/mcp-collection-change", {**args, "action": "apply"})
+
+
 
 def create_deck(args, state):
     if args.get("confirm") is not True:
@@ -524,11 +538,33 @@ TOOLS.extend([
     }
   }
 ])
+collection_change_fields = {
+    "operation": {"type": "string", "enum": ["add", "decrease", "remove", "append"]},
+    "name": {"type": "string", "description": "Exact card name for add, decrease, or remove"},
+    "quantity": {"type": "integer", "minimum": 1, "maximum": 100000,
+                 "description": "Copies to add or decrease"},
+    "text": {"type": "string", "description": "Collection export for append"},
+}
+TOOLS.extend([
+    {"name": "preview_collection_change",
+     "description": "Preview adding owned copies, decreasing copies, removing all copies of a card, or appending an import. Show the result and obtain explicit user approval before applying.",
+     "inputSchema": {"type": "object", "properties": collection_change_fields,
+                     "required": ["operation"], "additionalProperties": False}},
+    {"name": "apply_collection_change",
+     "description": "WRITE: Apply the approved collection change with the same inputs and both SHA-256 values from a fresh preview. Creates a local SQLite backup.",
+     "inputSchema": {"type": "object", "properties": {
+         **collection_change_fields,
+         "expected_collection_sha": {"type": "string"},
+         "expected_change_sha": {"type": "string"},
+         "confirm": {"type": "boolean", "description": "True only after explicit user approval of the preview"},
+     }, "required": ["operation", "expected_collection_sha", "expected_change_sha", "confirm"],
+         "additionalProperties": False}},
+])
 for item in TOOLS:
     item["annotations"] = {"readOnlyHint": item["name"] not in (
-        "apply_collection_import", "create_deck_version", "apply_deck_swap",
+        "apply_collection_import", "apply_collection_change", "create_deck_version", "apply_deck_swap",
         "install_update", "restart_forage", "create_deck", "apply_deck_import"),
-        "destructiveHint": item["name"] in ("apply_collection_import", "apply_deck_import"),
+        "destructiveHint": item["name"] in ("apply_collection_import", "apply_collection_change", "apply_deck_import"),
         "openWorldHint": False}
 
 HANDLERS = {
@@ -548,6 +584,8 @@ HANDLERS = {
     "restart_forage": restart_forage,
     "preview_collection_import": preview_collection_import,
     "apply_collection_import": apply_collection_import,
+    "preview_collection_change": preview_collection_change,
+    "apply_collection_change": apply_collection_change,
     "create_deck_version": create_deck_version,
 }
 

@@ -1,9 +1,9 @@
 name: Forage MCP bridge tests
 on:
   push:
-    branches: [main, feature/mcp-remote-updater]
+    branches: [main, feature/mcp-remote-updater, mcp-deck-import]
   pull_request:
-    branches: [main]
+    branches: [main, mcp-deck-import]
 jobs:
   bridge-tests:
     runs-on: ubuntu-latest
@@ -15,4 +15,6 @@ jobs:
       - name: Compile private bridge and server
         run: python -m py_compile mcp_bridge.py server.py
       - name: Run bridge regression suite
-        run: python -m unittest discover -s tests -p 'test_mcp_bridge.py' -v
+        run: |
+          python -m unittest discover -s tests -p 'test_mcp*.py' -v
+          python -m unittest discover -s tests -p 'test_collection_change.py' -v

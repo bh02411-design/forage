@@ -90,13 +90,15 @@ class BridgeAuthorizationTests(unittest.TestCase):
             connection.request.assert_called_once_with("GET", "/api/mcp-auth",
                                                        headers=bridge.MCP_HEADERS)
 
-    def test_discovery_lists_exactly_fourteen_tools_while_forage_is_offline(self):
+    def test_discovery_lists_tools_while_forage_is_offline(self):
         with patch.object(bridge.http.client, "HTTPConnection", side_effect=AssertionError("HTTP request")):
             tools = bridge.dispatch({"method": "tools/list"})["tools"]
-        self.assertEqual(len(tools), 14)
+        self.assertEqual(len(tools), 19)
         self.assertEqual({tool["name"] for tool in tools}, {
             "list_decks", "get_deck", "search_collection", "card_availability", "propose_swap",
             "preview_collection_import", "apply_collection_import", "create_deck_version",
             "preview_deck_swap", "apply_deck_swap", "check_updates", "update_status",
             "install_update", "restart_forage",
+            "create_deck", "preview_deck_import", "apply_deck_import",
+            "preview_collection_change", "apply_collection_change",
         })
