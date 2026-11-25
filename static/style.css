@@ -227,3 +227,175 @@ dialog.card-modal{width:min(1180px,96vw);max-width:96vw;max-height:94vh}
 /* ChatGPT replaces the legacy conversation panel. Give the deck the full workspace. */
 .workspace{grid-template-columns:minmax(0,1fr)!important}
 .workspace .card-board{height:clamp(550px,72vh,1100px)}
+.shell {
+  --bg: #101613;
+  --panel: #18211c;
+  --panel2: #202c24;
+  --line: #394b40;
+  --muted: #b5c3b9;
+  --text: #f2f3e9;
+  --green: #c8e5a9;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.shell .rail {
+  background: #1c2a22;
+  border-color: #405347;
+}
+
+.shell .brand {
+  margin-bottom: 36px;
+}
+
+.shell .rail-label,
+.shell footer {
+  color: var(--muted);
+}
+
+.shell .nav.active {
+  background: #354c37;
+  color: #e1f4ce;
+}
+
+.shell .nav:hover,
+.shell .quiet:hover {
+  background: #293a2e;
+}
+
+.shell .quiet {
+  border-radius: 6px;
+}
+
+.shell .rail select,
+.shell .nav span,
+.shell .quiet,
+.shell .button,
+.shell .tab,
+.shell .segmented button,
+.shell .view-tools label,
+.shell .view-tools select,
+.shell .deck-footer .quiet,
+.shell #card-count {
+  font-size: 0.9375rem;
+}
+
+.shell .nav small,
+.shell .stat-label,
+.shell .stat-value small {
+  font-size: 0.875rem;
+}
+
+.shell .button,
+.shell .segmented button {
+  min-height: 38px;
+}
+
+.shell .secondary,
+.shell .icon-btn,
+.shell .segmented {
+  border-color: #526658;
+}
+
+.shell .primary:hover {
+  background: #e2f3cd;
+}
+
+.shell .deck-heading h1 {
+  color: #f6f5ea;
+  font-size: clamp(1.75rem, 3.2vw, 2.6rem);
+  font-weight: 650;
+  line-height: 1.12;
+  letter-spacing: -0.035em;
+}
+
+.shell .deck-heading p,
+.shell .panel-head strong,
+.shell .search-row input,
+.shell .collection-search-row input,
+.shell .card-row,
+.shell .tile-caption strong,
+.shell #collection-table-wrap td {
+  font-size: 1rem;
+  line-height: 1.45;
+}
+
+.shell .stats {
+  background: #202d24;
+}
+
+.shell .stat-value,
+.shell #collection-table-wrap td {
+  font-variant-numeric: tabular-nums;
+}
+
+.shell .visual-group > .group-label,
+.shell .tile-caption small,
+.shell .qty,
+.shell .card-mv,
+.shell .swap-panel-heading,
+.shell #collection-table-wrap th {
+  font-size: 0.875rem;
+}
+
+.shell .card-row {
+  border-color: var(--line);
+}
+
+.shell .card-row:hover,
+.shell #collection-table-wrap tbody tr:hover {
+  background: #25362b;
+}
+
+.shell .swap-categories {
+  background: #121b16;
+}
+
+.shell .swap-panel-heading {
+  color: #e7cd95;
+  letter-spacing: 0.045em;
+}
+
+.shell #collection-table-wrap {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.shell #collection-table-wrap thead {
+  background: var(--panel2);
+}
+
+.shell .collection-card-grid [data-edit-owned] {
+  margin-top: 6px;
+}
+
+#modal {
+  background: #202c24;
+  border-color: #526658;
+}
+
+#modal .modal-head h2 {
+  font-size: 1.625rem;
+  font-weight: 650;
+}
+
+#modal .field,
+#modal .modal-note,
+#modal .oracle {
+  color: #d1ddd3;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+@media (max-width: 700px) {
+  .shell .brand { margin-bottom: 0; }
+  .shell .topbar { height: auto; min-height: 60px; flex-wrap: wrap; padding-block: 8px; }
+  .shell .top-actions { flex-wrap: wrap; }
+  .shell .deck-heading { flex-wrap: wrap; gap: 12px; }
+  .shell .deck-heading .top-actions { justify-content: flex-start; }
+  .shell .search-row input { min-width: 0; }
+  .shell .rail nav { flex-wrap: wrap; }
+  .shell .rail nav .nav { width: auto; }
+  .shell .stat-value small { font-size: 0.75rem; }
+}
