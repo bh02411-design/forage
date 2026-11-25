@@ -82,8 +82,8 @@ class BridgeTests(unittest.TestCase):
         messages = [json.loads(line) for line in output.getvalue().splitlines()]
         self.assertEqual([x["id"] for x in messages], [1, 2, 3])
         self.assertEqual(messages[0]["result"]["serverInfo"]["name"], "forage-private")
-        self.assertEqual(len(messages[1]["result"]["tools"]), 17)
-        self.assertEqual(sum(not tool["annotations"]["readOnlyHint"] for tool in messages[1]["result"]["tools"]), 7)
+        self.assertEqual(len(messages[1]["result"]["tools"]), 19)
+        self.assertEqual(sum(not tool["annotations"]["readOnlyHint"] for tool in messages[1]["result"]["tools"]), 8)
         self.assertNotIn("never-expose-this", output.getvalue())
 
     def test_no_credential_or_arbitrary_url_arguments(self):
