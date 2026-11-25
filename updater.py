@@ -11,6 +11,7 @@ MAX_PACKAGE=20*1024*1024
 
 # Release notes stay in an existing updater file so older installers accept the package.
 CHANGELOG={
+ '0.2.50':['Refresh the dark theme with a warmer evergreen palette and stronger contrast.','Increase type sizes across decks, collections, and dialogs, and improve control wrapping on narrow screens.'],
  '0.2.49':['Add individual cards, adjust owned copies, and remove collection entries.','Append imports to existing inventory with a preview and a SQLite backup before saving.','Add private MCP collection preview and apply tools with explicit approval and stale-state checks. Refresh separately deployed copies of the MCP bridge to discover the new tools.'],
  '0.2.48':['Authorize local MCP requests with a small scoped token response that is independent of workspace size.','Ship the 14-tool bridge in the Windows installer and document how to refresh existing tunnel profiles.'],
  '0.2.47':['Add validated one-for-one Commander deck swaps through a private MCP route with a stale-deck check, backup, and saved-state verification.','Add guarded remote update checking, staging and launcher restart through the MCP bridge with separate explicit approval for installation and activation.','Preserve existing decks and collection during updates; the separately deployed MCP bridge must be refreshed to expose new tools.'],
